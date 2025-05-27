@@ -2,12 +2,12 @@ package main
 
 import (
 	"github.com/rs/zerolog/log"
-	infrastructure "thuanle/cse-mark/internal/infra"
+	"thuanle/cse-mark/internal/infra"
 )
 
 func main() {
-	infrastructure.InitZerolog()
-	_ = infrastructure.InitDotenv()
+	infra.InitZerolog()
+	_ = infra.InitDotenv()
 
 	app, err := InitializeApp()
 	if err != nil {
