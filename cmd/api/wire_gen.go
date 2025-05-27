@@ -25,7 +25,7 @@ func InitializeApp() (*App, error) {
 	auth := middlewares.NewAuthMiddleware(config)
 	repository := mongo.NewMarkRepo(client, config)
 	marks := handlers.NewMarksHandler(repository)
-	service := api.NewApiService(auth, marks)
+	service := api.NewApiService(auth, marks, config)
 	app := &App{
 		Config:      config,
 		MongoClient: client,
