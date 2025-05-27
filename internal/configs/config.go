@@ -23,6 +23,7 @@ type Config struct {
 	TeleAdminChatIds []int64
 
 	ApiToken string
+	ApiPort  string
 }
 
 func LoadConfig() *Config {
@@ -43,6 +44,7 @@ func LoadConfig() *Config {
 		TeleAdminChatIds: loadEnvJsonSlice("ADMINS", []int64{}), // Default admin chat ID
 
 		ApiToken: loadEnv("API_TOKEN", ""),
+		ApiPort:  loadEnv("API_PORT", "8080"),
 	}
 }
 

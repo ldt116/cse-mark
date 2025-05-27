@@ -6,9 +6,10 @@ services:
     env_file:
       - .env
     ports:
-      - "12200:8080"
+      - "12200:12200"
     environment:
       - TZ=Asia/Ho_Chi_Minh
+      - API_PORT=12200
     restart: always
     network_mode: host
   tele:
