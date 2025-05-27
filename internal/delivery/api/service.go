@@ -3,14 +3,19 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
+	"thuanle/cse-mark/internal/delivery/api/handlers"
+	"thuanle/cse-mark/internal/delivery/api/middlewares"
 )
 
 type Service struct {
 	engine *gin.Engine
 }
 
-func NewApiService() *Service {
+func NewApiService(authMiddleware *middlewares.Auth,
+	marksHandler *handlers.Marks) *Service {
 	engine := gin.Default()
+
+	engine.GET("/mark", authMiddleware.Handle, marksHandler.GetMark)
 
 	return &Service{
 		engine: engine,

@@ -9,6 +9,8 @@ package main
 import (
 	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/delivery/api"
+	"thuanle/cse-mark/internal/delivery/api/handlers"
+	"thuanle/cse-mark/internal/delivery/api/middlewares"
 	"thuanle/cse-mark/internal/infra/mongo"
 )
 
@@ -20,7 +22,10 @@ func InitializeApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	service := api.NewApiService()
+	auth := middlewares.NewAuthMiddleware(config)
+	repository := mongo.NewMarkRepo(client, config)
+	marks := handlers.NewMarksHandler(repository)
+	service := api.NewApiService(auth, marks)
 	app := &App{
 		Config:      config,
 		MongoClient: client,

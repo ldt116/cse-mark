@@ -7,12 +7,12 @@ COPY . .
 
 RUN go mod tidy
 
-WORKDIR /app/cmd/fetcher
-RUN go build -o fetcher
+WORKDIR /app/cmd/api
+RUN go build -o api
 
 # RUN IMAGE
 FROM alpine
 WORKDIR /app
-COPY --from=build /app/cmd/fetcher/fetcher .
+COPY --from=build /app/cmd/api/api .
 
-CMD ["./fetcher"]
+CMD ["./api"]

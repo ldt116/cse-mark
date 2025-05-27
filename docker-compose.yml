@@ -1,5 +1,15 @@
 version: '3'
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile_api
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+    restart: always
+    network_mode: host
   tele:
     build:
       context: .
