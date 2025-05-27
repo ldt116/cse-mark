@@ -14,6 +14,5 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to initialize application")
 		return
 	}
-	app.HttpService.Start()
-
+	app.ApiService.Start()
 }
