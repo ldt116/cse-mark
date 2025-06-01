@@ -2,11 +2,12 @@ package mongo
 
 import (
 	"context"
+	"thuanle/cse-mark/internal/configs"
+	"time"
+
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"thuanle/cse-mark/internal/configs"
-	"time"
 )
 
 type Client struct {
@@ -16,8 +17,8 @@ type Client struct {
 }
 
 func NewClient(config *configs.Config) (*Client, error) {
-	connectionString := `mongodb://` + config.MongoHost + `:` + config.MongoPort
-
+	// connectionString := `mongodb://` + config.MongoHost + `:` + config.MongoPort
+	connectionString := config.MongoURI
 	ctx, cancel := context.WithTimeout(context.Background(), config.DbTransactionTimeout)
 	defer cancel()
 

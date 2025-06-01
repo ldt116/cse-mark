@@ -2,10 +2,11 @@ package markimport
 
 import (
 	"errors"
-	"github.com/rs/zerolog/log"
 	"thuanle/cse-mark/internal/domain/course"
 	"thuanle/cse-mark/internal/domain/downloader"
 	"thuanle/cse-mark/internal/domain/mark"
+
+	"github.com/rs/zerolog/log"
 )
 
 type Service struct {
