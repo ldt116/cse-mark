@@ -14,6 +14,8 @@ type Config struct {
 	DbSettings           string
 	DbSettingsUsers      string
 	DbSettingsCourses    string
+	ApiSecretKey         string
+	MongoURI             string
 
 	CourseActiveAge time.Duration
 
@@ -32,6 +34,8 @@ func LoadConfig() *Config {
 		DbSettings:           loadEnv("DB_SETTINGS", "mark-settings"),
 		DbSettingsUsers:      loadEnv("DB_SETTINGS_USERS", "users"),
 		DbSettingsCourses:    loadEnv("DB_SETTINGS_COURSES", "courses"),
+		ApiSecretKey:         loadEnv("API_SECRET_KEY", ""),
+		MongoURI:             loadEnv("MONGO_URI", "localhost"),
 
 		CourseActiveAge: 9 * 30 * 24 * time.Hour, // 9 months
 
