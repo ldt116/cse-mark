@@ -19,8 +19,8 @@ func NewAuthzService(courseRepo course.Repository, userRepo user.Repository) *Au
 }
 
 // CanEditCourse checks if the user can edit the course.
-func (s *AuthzService) CanEditCourse(username string, teleId int64, courseID string) (bool, error) {
-	courseModel, err := s.courseRepo.FindCourseById(courseID)
+func (s *AuthzService) CanEditCourse(username string, teleId int64, courseId string) (bool, error) {
+	courseModel, err := s.courseRepo.FindCourseById(courseId)
 
 	if err != nil {
 		if errors.Is(err, course.ErrNotFound) {
@@ -30,7 +30,13 @@ func (s *AuthzService) CanEditCourse(username string, teleId int64, courseID str
 		return false, err
 	}
 
-	return courseModel.ByTeleUser == username || courseModel.ByTeleId == teleId, nil
+	if username != "" && courseModel.ByTeleUser == username {
+		return true, nil
+	}
+	if teleId != 0 && courseModel.ByTeleId == teleId {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (s *AuthzService) IsTeacher(username string) (bool, error) {
