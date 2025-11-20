@@ -14,9 +14,13 @@ type Service struct {
 }
 
 func NewApiService(authMiddleware *middlewares.Auth,
-	marksHandler *handlers.Marks, config *configs.Config) *Service {
+	marksHandler *handlers.Marks, healthHandler *handlers.Health, config *configs.Config) *Service {
 	engine := gin.Default()
 
+	// Health check endpoint (no authentication required)
+	engine.GET("/healthz", healthHandler.Check)
+
+	// API endpoints (authentication required)
 	engine.GET("/mark", authMiddleware.Handle, marksHandler.GetMark)
 
 	return &Service{

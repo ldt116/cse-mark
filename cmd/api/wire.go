@@ -39,6 +39,7 @@ func InitializeApp() (*App, error) {
 		//delivery-api
 		middlewares.NewAuthMiddleware,
 		handlers.NewMarksHandler,
+		handlers.NewHealthHandler,
 		//delivery
 		api.NewApiService,
 		//app
