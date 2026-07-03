@@ -39,81 +39,73 @@ Chỉ định phần code/dịch vụ bị ảnh hưởng:
 | `scope/discord` | `#5319e7` (Xanh Discord) | Giao diện Bot Discord và bộ đồng bộ role (`cmd/discord`). |
 | `scope/database` | `#bfd4f2` (Xanh xám) | Cấu trúc MongoDB, index, các repo trong `internal/infra/mongo`. |
 
-### 1.4. Phân loại theo Trạng thái (`status/*`)
-Theo dõi trạng thái của Issue (nếu không sử dụng Gitea Projects Board):
+### 1.4. Phân loại theo Trạng thái & Các lớp Review (`status/*`)
+Theo dõi tiến độ phát triển và các lớp kiểm duyệt độc lập từ Dev đến Admin:
 
 | Nhãn | Màu sắc | Ý nghĩa |
 |---|---|---|
-| `status/todo` | `#bfd4f2` | Đã lên kế hoạch nhưng chưa bắt đầu. |
-| `status/in-progress` | `#fef2c0` | Đang được phát triển tích cực. |
-| `status/review-needed` | `#fbca04` | Code đã xong, đang đợi review PR. |
+| `status/todo` | `#bfd4f2` (Xám xanh) | Đã lập kế hoạch, chờ phân bổ thực hiện. |
+| `status/in-progress` | `#fef2c0` (Vàng nhạt) | Dev đang tiến hành code. |
+| `status/dev-ready` | `#a2eeef` (Xanh dương sáng) | Dev đã viết xong code & tự kiểm thử (Unit test/Local) thành công. |
+| `status/peer-review` | `#7057ff` (Tím) | Chờ dev khác trong dự án review code chéo (Peer Code Review). |
+| `status/qa-testing` | `#fbca04` (Cam) | Chuyển giao cho bên QA/Tester độc lập kiểm thử hộp đen và check lỗi nghiệp vụ. |
+| `status/admin-approval` | `#e11d21` (Đỏ) | Chờ Admin/Maintainer phê duyệt cấu hình, bảo mật và kiến trúc trước khi merge. |
+| `status/completed` | `#2cbe4e` (Xanh lá) | PR đã merge, issue đã hoàn thành và deploy thành công. |
 
 ---
 
-## 2. Quy trình Quản lý Issue (Issue Lifecycle)
+## 2. Quy trình kiểm duyệt Issue (Issue Lifecycle)
 
-Mọi thay đổi code hoặc tính năng mới **bắt buộc** phải bắt đầu bằng một Issue.
+Mọi yêu cầu sửa lỗi hay tính năng mới phải đi qua 3 bên kiểm duyệt độc lập (Dev chéo, QA, Admin) theo luồng:
 
 ```mermaid
 graph TD
-    A[Tạo Issue] --> B{Phân loại & Gán nhãn}
-    B -->|type/*, scope/*, priority/*| C[Gán người thực hiện Assignee]
-    C --> D[Chuyển trạng thái status/in-progress]
-    D --> E[Lập trình trên nhánh riêng]
-    E --> F[Tạo Pull Request kết nối Issue]
+    A[Tạo Issue: status/todo] --> B[Dev nhận việc: status/in-progress]
+    B --> C[Dev tự kiểm thử đạt: status/dev-ready]
+    C --> D[Lập PR: status/peer-review]
+    D -->|Dev khác Approved| E[Bên QA độc lập test: status/qa-testing]
+    E -->|QA Pass| F[Admin phê duyệt cuối: status/admin-approval]
+    F -->|Admin Approved & Merge| G[Deploy & Đóng Issue: status/completed]
 ```
 
-### 2.1. Tạo Issue
+### 2.1. Tạo Issue & Bắt đầu phát triển
 * **Tiêu đề:** Tuân theo format `[Phân hệ] Tên issue` (Ví dụ: `[discord] Triển khai lệnh /bind gửi OTP`).
-* **Nội dung:** Phải ghi rõ:
-  - Bối cảnh/Yêu cầu nghiệp vụ.
-  - Các bước cần triển khai cụ thể (checklist).
-  - Kết quả mong đợi.
-* **Gán nhãn:** Add tối thiểu 3 nhãn: 1 `type/*`, 1 `scope/*`, và 1 `priority/*`.
-
-### 2.2. Nhận việc & Phát triển
-* Thành viên nhận việc tự gán tên mình vào mục `Assignees`.
-* Gắn nhãn `status/in-progress` cho Issue.
-* Tạo nhánh (branch) mới từ `main` theo quy tắc đặt tên:
-  - Tính năng mới: `feature/<issue-id>-<tên_ngắn>` (vd: `feature/12-discord-bind`).
-  - Sửa lỗi: `bugfix/<issue-id>-<tên_ngắn>` (vd: `bugfix/15-ttl-index-expiry`).
+* **Nội dung:** Ghi rõ yêu cầu, checklist triển khai, và tiêu chí nghiệm thu (UAT).
+* **Gán nhãn khởi tạo:** `type/*`, `scope/*`, `priority/*`, và gán `status/todo`.
+* **Nhận việc:** Dev gán tên mình vào `Assignees` và đổi sang `status/in-progress`.
+* **Tạo nhánh:** Tạo nhánh từ `main` dạng `feature/...` hoặc `bugfix/...`.
 
 ---
 
-## 3. Quy trình Pull Request (PR Workflow)
+## 3. Quy trình Pull Request & Lớp kiểm duyệt (PR Review Workflow)
 
-```mermaid
-gitGraph
-    commit id: "a968610 (main)"
-    branch feature/12-discord-bind
-    checkout feature/12-discord-bind
-    commit id: "add verify"
-    commit id: "add bind flow"
-    checkout main
-    merge feature/12-discord-bind id: "Merge PR #15"
-```
+Mỗi Pull Request đại diện cho một chặng kiểm duyệt độc lập, trạng thái PR được cập nhật qua nhãn `status/*` tương ứng:
 
 ### 3.1. Tạo PR nháp (Draft / WIP)
-* Khi mới bắt đầu phát triển, khuyến khích tạo PR dạng **Draft** (hoặc đặt tiêu đề bắt đầu bằng `WIP: `) để:
-  - Nhận feedback sớm từ các thành viên khác.
-  - Cho phép hệ thống CI tự động kiểm tra cú pháp và build thử.
-* Trong phần mô tả PR, sử dụng từ khóa liên kết Gitea để tự động đóng Issue khi merge (Ví dụ: `Closes #12`).
+* Khi bắt đầu code, tạo Draft PR (hoặc prefix `WIP: `) để chạy CI sớm và nhận phản hồi sớm.
+* Liên kết tự động đóng issue bằng từ khóa: `Closes #<issue-id>` trong mô tả PR.
 
-### 3.2. Yêu cầu Review (Review Ready)
-* Khi phát triển xong, chạy test cục bộ và đảm bảo code sạch.
-* Đổi PR từ Draft sang Ready (hoặc bỏ tiền tố `WIP:`).
-* Gán nhãn `status/review-needed` cho PR.
-* Gán ít nhất 1 thành viên Admin làm **Reviewer**.
+### 3.2. Chặng 1: Peer Code Review (`status/peer-review`)
+* Khi dev tự test local thấy đạt (`status/dev-ready`), chuyển PR sang trạng thái Ready và gán nhãn `status/peer-review`.
+* **Hành động:** Thành viên dev khác trong team nhảy vào đọc code, kiểm tra logic, comment góp ý.
+* **Yêu cầu thông qua:** Nhận được ít nhất 1 **Approval** từ dev khác trên PR.
 
-### 3.3. Tiêu chuẩn thông qua (Merge Checklist)
-Một PR chỉ được phép merge khi thỏa mãn toàn bộ các điều kiện sau:
-1. [ ] **CI Pass:** Pipeline Gitea Actions kiểm tra tĩnh (golangci-lint), chạy test (`go test`) và build Docker images thành công.
-2. [ ] **Review Approved:** Được duyệt và approve bởi ít nhất một Admin.
-3. [ ] **Không xung đột (No Conflicts):** Đã được rebase/merge với code mới nhất trên nhánh `main`.
+### 3.3. Chặng 2: Independent QA Testing (`status/qa-testing`)
+* Sau khi code review xong, gán nhãn `status/qa-testing` và chuyển cho bên QA/Tester độc lập.
+* **Hành động:** QA lấy code từ nhánh PR để deploy thử lên môi trường Staging/Canary, thực hiện kiểm thử hộp đen (Black-box testing), kiểm tra các kịch bản biên, kịch bản lỗi (spam OTP, email sai roster, Discord rate-limit).
+* **Yêu cầu thông qua:** QA phản hồi trên PR hoặc đóng vai trò reviewer chấp thuận (QA Approved). Nếu phát hiện bug, chuyển về `status/in-progress` để dev sửa.
 
-### 3.4. Phương thức Merge (Merge Style)
-* Ưu tiên sử dụng **Rebase and Merge** hoặc **Squash and Merge** đối với các feature branch nhỏ để giữ lịch sử commit trên nhánh `main` luôn là một đường thẳng (linear history), dễ theo dõi và rollback.
-* Tránh sử dụng merge commit (`Merge branch '...'`) thông thường để tránh làm rối đồ thị Git.
+### 3.4. Chặng 3: Admin & Security Approval (`status/admin-approval`)
+* Sau khi QA pass, gán nhãn `status/admin-approval`.
+* **Hành động:** Admin/Security Reviewer kiểm tra toàn diện:
+  - Tính an toàn của biến môi trường, thông tin bảo mật (SMTP, Discord Token).
+  - Đảm bảo database index (Unique index bindings, TTL Date) chính xác.
+  - Phù hợp với định hướng kiến trúc clean-architecture của dự án.
+* **Yêu cầu thông qua:** Admin chấp thuận (Approved) và thực hiện click **Merge**.
+
+### 3.5. Đóng công việc (`status/completed`)
+* PR được merge bằng phương thức **Rebase and Merge** hoặc **Squash and Merge**.
+* Trạng thái PR và Issue liên kết tự động chuyển sang `status/completed`. Nhánh phát triển được xóa sạch.
 
 ---
 
