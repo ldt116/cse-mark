@@ -25,16 +25,17 @@
 
 3. Tạo collection mới + index:
    - `mark-settings.students` — unique index `email`.
-   - `mark-settings.bindings` — unique `(platform, platform_user_id)`, index `mssv`.
-   - `mark-settings.verifications` — TTL index trên `expiry`.
-4. Mở rộng `users`: thêm trường `role` (default `student`); dữ liệu cũ `IsTeacher=true` → `role=lecturer`.
+   - `mark-settings.bindings` — unique `(platform, platform_user_id)` và `(platform, mssv)` (ràng buộc 1:1:1), index `mssv` để lookup nhanh.
+   - `mark-settings.verifications` — TTL index trên `expiry` (được lưu kiểu BSON Date).
+4. Mở rộng `users`: thêm trường `role` (default `student`), dọn dẹp trường cũ `is_teacher` (IsTeacher=true → role=lecturer).
 
 ```js
 // ví dụ migration (Mongo shell)
-db.users.updateMany({is_teacher: true}, {$set: {role: "lecturer"}})
+db.users.updateMany({is_teacher: true}, {$set: {role: "lecturer"}, $unset: {is_teacher: ""}})
 db.users.updateMany({role: {$exists: false}}, {$set: {role: "student"}})
 db.students.createIndex({email: 1}, {unique: true})
 db.bindings.createIndex({"platform":1,"platform_user_id":1}, {unique: true})
+db.bindings.createIndex({"platform":1,"mssv":1}, {unique: true})
 db.bindings.createIndex({mssv: 1})
 db.verifications.createIndex({expiry: 1}, {expireAfterSeconds: 0})
 ```

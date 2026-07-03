@@ -42,14 +42,14 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 
 | Gói | Trạng thái | Nội dung |
 |---|---|---|
-| `domain/course` | hiện có | entity Class, `Repository`, `Rules` |
-| `domain/user` | hiện có | `Model`, `Repository` (mở rộng role) |
+| `domain/course` | **mở rộng** | entity Class (thêm `DiscordRoleId`, `DiscordChannelId`), `Repository` (hỗ trợ lưu ID), `Rules` |
+| `domain/user` | **mở rộng** | `Model` (thêm `Role`), `Repository` (hỗ trợ query theo `MSSV` / `_id` cũ) |
 | `domain/mark` | hiện có | `Repository` (per-course) |
 | `domain/downloader` | hiện có | `Repository.DownloadCSV` |
 | `domain/teleuser` | hiện có | validation |
 | `domain/student` | **mới** | `Model{MSSV,Name,Email}`, `Repository` |
-| `domain/binding` | **mới** | `Model{Platform,PlatformUserID,MSSV,Verified,BoundAt}`, `Repository` |
-| `domain/verification` | **mới** | `Model{PlatformUserID,Email,OTP,Expiry}`, `Repository` (TTL) |
+| `domain/binding` | **mới** | `Model{Platform,PlatformUserID,MSSV,Verified,BoundAt}`, `Repository` (index unique `platform + mssv` và `platform + platform_user_id`) |
+| `domain/verification` | **mới** | `Model{PlatformUserID,Email,OTP,Expiry time.Time}`, `Repository` (TTL qua kiểu Date) |
 | `domain/discord` | **mới (port)** | interface `Bot` (xem §4) |
 | `domain/email` | **mới (port)** | interface `Sender` (xem §4) |
 
@@ -57,11 +57,11 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 
 | Gói | Trạng thái | Vai trò |
 |---|---|---|
-| `usecases/iam` | hiện có | `AuthzService`: `CanEditCourse`, `IsTeacher` |
+| `usecases/iam` | **mở rộng** | `AuthzService`: `CanEditCourse`, `IsTeacher` (chuyển sang phân quyền theo `MSSV` sau khi map platformUserID qua `bindings`; hỗ trợ fallback Telegram username cũ) |
 | `usecases/coursequery` | hiện có | `ActiveCourseService` |
 | `usecases/markimport` | hiện có | download + parse + import marks |
 | `usecases/marksync` | hiện có | scheduler mark sync 10p |
-| `usecases/identity` | **mới** | `BindStart` (sinh OTP, gửi), `BindVerify` (tra MSSV từ roster, lưu binding), `GetBinding` |
+| `usecases/identity` | **mới** | `BindStart` (kiểm tra roster trước khi sinh OTP, gửi), `BindVerify` (lưu binding), `GetBinding` |
 | `usecases/rostersync` | **mới** | download roster CSV → `student` repo |
 | `usecases/classsync` | **mới** | enrollment → diff role Discord qua `discord.Bot` |
 
@@ -77,9 +77,9 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 
 | Gói | Trạng thái |
 |---|---|
-| `infra/mongo` | hiện có + repo mới: `student`, `binding`, `verification` |
+| `infra/mongo` | hiện có + repo mới: `student`, `binding`, `verification` (TTL Date) |
 | `infra/http` | hiện có (`SimpleDownloader`) |
-| `infra/discord` | **mới** — `discordgo` client implement `discord.Bot` |
+| `infra/discord` | **mới** — `discordgo` client implement `discord.Bot` (hỗ trợ rate-limit backoff) |
 | `infra/email` | **mới** — SMTP implement `email.Sender` |
 
 ## 4. Port (interface)
@@ -88,21 +88,22 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 
 ```go
 type Bot interface {
-    // Provisioning (theo tên, idempotent)
-    EnsureRole(ctx, name string) (roleID string, err error)
-    EnsureChannel(ctx, name string, roleID string) error
-    DeleteRole(ctx, name string) error
-    DeleteChannel(ctx, name string) error
+    // Provisioning (trả về ID để lưu DB)
+    EnsureRole(ctx context.Context, name string) (roleID string, err error)
+    EnsureChannel(ctx context.Context, name string, roleID string) (channelID string, err error)
+    DeleteRole(ctx context.Context, roleID string) error
+    DeleteChannel(ctx context.Context, channelID string) error
 
-    // Role membership (cho diff)
-    AssignRole(ctx, userID string, roleName string) error
-    RemoveRole(ctx, userID string, roleName string) error
-    MembersWithRole(ctx, roleName string) ([]string, error)
+    // Role membership (sử dụng roleID đã lưu)
+    AssignRole(ctx context.Context, userID string, roleID string) error
+    RemoveRole(ctx context.Context, userID string, roleID string) error
+    MembersWithRole(ctx context.Context, roleID string) ([]string, error)
 }
 ```
 
-- Tất cả resolve **theo tên** (không lưu ID trong DB). `infra/discord` lookup guild role/channel by name.
+- Các ID `roleID` và `channelID` được lưu trực tiếp vào collection `courses` trong database sau khi tạo thành công.
 - Naming: role = `courseId`; channel = `lowercase(courseId)`.
+- **Cơ chế xử lý Rate-Limit:** `infra/discord` bọc client `discordgo` với cơ chế hàng đợi lệnh (command queue) và tự động tạm dừng (sleep) theo header `Retry-After` khi gặp lỗi HTTP 429 từ Discord API, đảm bảo tiến trình scheduler đồng bộ không bị ngắt quãng đột ngột.
 
 ### 4.2 `domain/email.Sender`
 

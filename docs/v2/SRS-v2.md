@@ -180,10 +180,10 @@ Cơ chế: mặc định khi bind thành công.
 ## 6.1 Bind (Telegram và Discord — identity thống nhất)
 
 1. SV chạy `/bind`, bot yêu cầu **email HCMUT** (vd `abc@hcmut.edu.vn`).
-2. Bot sinh OTP, gửi tới email đó qua `email.Sender`; lưu `verification` (có TTL).
-3. SV nhập OTP.
-4. Bot kiểm OTP + expiry, tra **MSSV** từ `student` (roster) theo email. Nếu email **không có trong roster → bind thất bại**.
-5. Bot lưu `binding` (platform + platformUserID ↔ MSSV, verified).
+2. Bot kiểm tra **email** trong danh sách `student` (roster). Nếu email **không có trong roster → báo lỗi và kết thúc ngay**.
+3. Nếu email hợp lệ, bot sinh OTP, gửi tới email đó qua `email.Sender`; lưu `verification` (sử dụng kiểu Date cho TTL).
+4. SV nhập OTP.
+5. Bot kiểm OTP + expiry và thực hiện lưu `binding` (platform + platformUserID ↔ MSSV, verified).
 
 ## 6.2 Sau bind — Discord
 
@@ -206,8 +206,10 @@ Mỗi lớp học (Class) ánh xạ 1-1 với entity `course` hiện có của b
 | `byUser` | MSSV/UserID chủ sở hữu (Lecturer tạo) |
 | `updatedAt` | Thời điểm đồng bộ gần nhất |
 | `recordCnt` | Số dòng điểm |
+| `discordRoleId` | ID của Role tương ứng trên Discord (string, nullable, lưu để tối ưu lookup) |
+| `discordChannelId` | ID của Channel tương ứng trên Discord (string, nullable, lưu để tối ưu lookup) |
 
-> **Không lưu** `DiscordRoleID / DiscordChannelID / Section / Semester`. Discord bot tự **resolve role/channel theo tên** suy ra từ `courseId` qua Discord API.
+> **Quy trình hoạt động:** Khi tạo lớp qua `/create` lần đầu tiên, Discord bot tự resolve role/channel theo tên và lưu lại `discordRoleId` và `discordChannelId` vào database. Các lần sync sau sẽ dùng trực tiếp ID này.
 
 **Quy ước đặt tên (Discord):**
 
@@ -216,7 +218,7 @@ Mỗi lớp học (Class) ánh xạ 1-1 với entity `course` hiện có của b
 | Role | `courseId` nguyên bản (vd `CO2003-L01`) |
 | Channel | `courseId` lowercase (vd `co2003-l01`) |
 
-Channel chỉ cho phép role tương ứng truy cập.
+Channel chỉ cho phép role tương ứng truy cập. Giảng viên và Admin mặc định được cấp quyền truy cập toàn bộ kênh học tập mà không cần gán role lớp học.
 
 ---
 
@@ -353,7 +355,9 @@ Nguồn: Roster CSV.
 - `Verified` (bool)
 - `BoundAt`
 
-Unique theo `(Platform, PlatformUserID)`. Một MSSV có thể bind trên cả hai nền tảng.
+Ràng buộc: 
+1. Unique theo `(Platform, PlatformUserID)` để một tài khoản chat chỉ liên kết tối đa với một MSSV.
+2. Unique theo `(Platform, MSSV)` để đảm bảo quan hệ 1:1:1 (một MSSV chỉ liên kết với tối đa 1 Telegram ID và 1 Discord ID).
 
 ## Class (= entity `course`)
 
@@ -362,8 +366,8 @@ Unique theo `(Platform, PlatformUserID)`. Một MSSV có thể bind trên cả h
 - `ByUser` (chủ sở hữu)
 - `UpdatedAt`
 - `RecordCnt`
-
-Không có trường Discord.
+- `DiscordRoleId` (string, nullable) - ID Role tương ứng trên Discord Guild
+- `DiscordChannelId` (string, nullable) - ID Channel tương ứng trên Discord Guild
 
 ## Enrollment (phái sinh)
 
@@ -377,20 +381,19 @@ Không có trường Discord.
 
 ## Verification (tạm thời, TTL)
 
-- `PlatformUserID`
+- `PlatformUserID` (khóa chính `_id`)
 - `Email`
 - `OTP`
-- `Expiry`
-
-Tự xoá sau TTL.
+- `Expiry` (kiểu Date) - Thời điểm hết hạn (để phục vụ MongoDB TTL Index)
 
 ## User / Account (role)
 
-- `MSSV` (khóa)
+- `MSSV` (khóa chính `_id`)
 - `Role` (`admin` | `lecturer` | `student`)
 - `GrantedBy`
 
-Mở rộng từ `user` hiện có (`UserId, IsTeacher, GrantedBy`).
+Cơ chế phân quyền: Hệ thống lấy PlatformUserID của người gửi lệnh, tra cứu qua collection `bindings` để tìm `MSSV` tương ứng, sau đó đối chiếu quyền `Role` trong collection `users`. 
+*Lưu ý di trú (Pha 3): Để hỗ trợ các giảng viên cũ chưa bind tài khoản, hệ thống cho phép fallback tra cứu quyền trực tiếp theo Telegram username nếu không tìm thấy binding.*
 
 ---
 

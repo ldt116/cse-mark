@@ -24,19 +24,21 @@ Nguồn: Roster CSV. Email unique ngầm (mỗi email ↔ 1 MSSV).
 | Verified | bool | `verified` | |
 | BoundAt | int64 | `bound_at` | unix |
 
-Unique: `(platform, platform_user_id)`. Một MSSV có thể có binding trên cả 2 platform.
+Ràng buộc độc nhất (Unique Indexes):
+- Unique index 1: `(platform, platform_user_id)` để đảo ngược lookup nhanh từ tài khoản chat sang MSSV.
+- Unique index 2: `(platform, mssv)` để đảm bảo một MSSV chỉ liên kết với tối đa 1 ID chat trên mỗi nền tảng (quan hệ 1:1:1).
 
-### Class (= entity `course`, giữ nguyên v1)
+### Class (= entity `course`, mở rộng v1)
 
-| Trường | Kiểu | bson |
-|---|---|---|
-| CourseId | string | `_id` (`course`) |
-| Link | string | `link` |
-| ByTeleId/ByUser | int64/string | `by_id` / `by_user` |
-| UpdatedAt | int64 | `updated_at` |
-| RecordCnt | int64 | `record_cnt` |
-
-> Không thêm trường Discord nào. Quy ước đặt tên Discord role/channel ở §4.
+| Trường | Kiểu | bson | Ghi chú |
+|---|---|---|---|
+| CourseId | string | `_id` (`course`) | khóa |
+| Link | string | `link` | |
+| ByTeleId/ByTeleUser | int64/string | `by_id` / `by_user` | Telegram owner |
+| UpdatedAt | int64 | `updated_at` | |
+| RecordCnt | int64 | `record_cnt` | |
+| DiscordRoleId | string | `discord_role_id` | Mới - ID của role lớp trên Discord |
+| DiscordChannelId | string | `discord_channel_id` | Mới - ID của channel lớp trên Discord |
 
 ### Enrollment (phái sinh, không collection riêng)
 
@@ -50,31 +52,29 @@ Unique: `(platform, platform_user_id)`. Một MSSV có thể có binding trên c
 
 ### Verification (TTL)
 
-| Trường | Kiểu | bson |
-|---|---|---|
-| PlatformUserID | string | `_id` (hoặc `platform_user_id`) |
-| Email | string | `email` |
-| OTP | string | `otp` |
-| Expiry | int64 | `expiry` |
+| Trường | Kiểu | bson | Ghi chú |
+|---|---|---|---|
+| PlatformUserID | string | `_id` | khóa chính |
+| Email | string | `email` | |
+| OTP | string | `otp` | |
+| Expiry | Date (time.Time) | `expiry` | Phải sử dụng kiểu Date để TTL Index hoạt động |
 
-Tự xoá qua **TTL index** (`expireAfterSeconds`).
+Tự xoá qua **TTL index** (`expireAfterSeconds: 0`).
 
 ### User / Account (mở rộng từ `user` v1)
 
-| Trường | Kiểu | bson |
-|---|---|---|
-| UserId/MSSV | string | `_id` (`user_id`) |
+| Trường | Kiểu | bson | Ghi chú |
+|---|---|---|---|
+| MSSV/UserId | string | `_id` (`user_id`) | Khóa chính (MSSV cho user mới, Telegram username cho user cũ) |
 | Role | string | `role` | `admin` \| `lecturer` \| `student` |
-| GrantedBy | string | `granted_by` |
-
-> Tương đương `user.Model{IsTeacher}` v1 nhưng tổng quát hóa thành `Role`.
+| GrantedBy | string | `granted_by` | |
 
 ## 2. CSDL / Collection MongoDB
 
 | DB | Collection | Entity | Ghi chú |
 |---|---|---|---|
 | `mark-cse` | `<courseId>` (mỗi lớp 1 collection) | Mark cache | v1 |
-| `mark-settings` | `courses` | Class | v1 (`DB_SETTINGS_COURSES`) |
+| `mark-settings` | `courses` | Class | v1 (`DB_SETTINGS_COURSES`), mở rộng thêm Discord IDs |
 | `mark-settings` | `users` | User/Account | v1 (`DB_SETTINGS_USERS`), mở rộng role |
 | `mark-settings` | `students` | Student | **mới** |
 | `mark-settings` | `bindings` | Binding | **mới** |
@@ -87,8 +87,11 @@ Tự xoá qua **TTL index** (`expireAfterSeconds`).
 v1 hiện không có index ngoài `_id`. v2 thêm:
 
 - `students`: unique index trên `email` (tra email → MSSV khi bind).
-- `bindings`: unique index trên `(platform, platform_user_id)`; index trên `mssv` (liệt kê binding của 1 MSSV).
-- `verifications`: **TTL index** trên `expiry` (tự xoá OTP hết hạn).
+- `bindings`: 
+  - Unique index trên `(platform, platform_user_id)` (dành cho lookup ngược chat → MSSV).
+  - Unique index trên `(platform, mssv)` (dành cho ràng buộc 1:1:1).
+  - Index trên `mssv` (để hỗ trợ liệt kê tất cả bindings của 1 MSSV).
+- `verifications`: **TTL index** trên `expiry` (kiểu Date, tự xoá OTP sau khi hết hạn).
 - `courses`: index trên `updated_at` (đã dùng ngầm bởi `FindCoursesUpdatedAfter`).
 - mark collections: index `_id` (MSSV) — đủ cho `GetMark(courseId, studentId)`.
 
