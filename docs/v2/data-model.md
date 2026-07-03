@@ -34,9 +34,10 @@ Ràng buộc độc nhất (Unique Indexes):
 |---|---|---|---|
 | CourseId | string | `_id` (`course`) | khóa |
 | Link | string | `link` | |
-| ByTeleId/ByTeleUser | int64/string | `by_id` / `by_user` | Telegram owner |
 | UpdatedAt | int64 | `updated_at` | |
 | RecordCnt | int64 | `record_cnt` | |
+
+> Các field legacy `by_id` / `by_user` của v1 có thể còn tồn tại trong collection `courses`, nhưng không còn dùng cho ownership hay phân quyền ở v2.
 
 ### DiscordMapping (mới)
 
@@ -67,13 +68,13 @@ Ràng buộc độc nhất (Unique Indexes):
 
 Tự xoá qua **TTL index** (`expireAfterSeconds: 0`).
 
-### User / Account (mở rộng từ `user` v1)
+### User (legacy v1, không dùng cho auth v2)
 
 | Trường | Kiểu | bson | Ghi chú |
 |---|---|---|---|
-| MSSV/UserId | string | `_id` (`user_id`) | Khóa chính (MSSV cho user mới, Telegram username cho user cũ) |
-| Role | string | `role` | `admin` \| `student` |
-| GrantedBy | string | `granted_by` | |
+| UserId | string | `_id` (`user_id`) | Telegram username v1 |
+| IsTeacher | bool | `is_teacher` | legacy |
+| GrantedBy | string | `granted_by` | legacy |
 
 ## 2. CSDL / Collection MongoDB
 
@@ -82,7 +83,7 @@ Tự xoá qua **TTL index** (`expireAfterSeconds: 0`).
 | `mark-cse` | `<courseId>` (mỗi lớp 1 collection) | Mark cache | v1 |
 | `mark-settings` | `courses` | Class | v1 (`DB_SETTINGS_COURSES`) |
 | `mark-settings` | `discord_mappings` | DiscordMapping | **mới** (bảng liên kết Discord IDs) |
-| `mark-settings` | `users` | User/Account | v1 (`DB_SETTINGS_USERS`), mở rộng role (admin/student) |
+| `mark-settings` | `users` | User (legacy v1) | giữ nguyên, không dùng cho auth v2 |
 | `mark-settings` | `students` | Student | **mới** |
 | `mark-settings` | `bindings` | Binding | **mới** |
 | `mark-settings` | `verifications` | Verification | **mới** (TTL) |
@@ -119,7 +120,9 @@ Ràng buộc: `courseId` phải hợp lệ làm tên channel (lowercase, không 
 ```text
 Student(MSSV) ──email── bind flow
 Binding(MSSV, platform, platformUserID)
-Class(CourseId) ──mark cache──▶ Enrollment(MSSV set)
+Class(CourseId) ──discord_mappings──▶ Discord role/channel IDs
+          │
+          └──mark cache──▶ Enrollment(MSSV set)
 /mark: PlatformUserID ──Binding──▶ MSSV ──▶ mark cache (theo CourseId)
 role-sync: Enrollment ──Binding──▶ platformUserID ──▶ discord.Bot
 ```

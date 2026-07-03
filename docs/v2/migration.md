@@ -4,7 +4,7 @@
 
 ## 1. Nguyên tắc
 
-- **Cộng thêm, không phá**: v2 thêm collection mới (`students`, `bindings`, `verifications`), mở rộng trường `user.role`. Dữ liệu v1 (`courses`, marks, `users`) giữ nguyên.
+- **Cộng thêm, không phá**: v2 thêm collection mới (`students`, `bindings`, `verifications`, `discord_mappings`). Dữ liệu v1 (`courses`, marks, `users`) giữ nguyên; collection `users` không còn tham gia phân quyền v2.
 - Telegram tiếp tục chạy trong suốt quá trình; chỉ `/mark` thay đổi hành vi (cần bind) ở cutover.
 - Discord là service mới, có thể bật/tắt độc lập.
 
@@ -12,6 +12,7 @@
 
 - Roster CSV sẵn sàng tại `ROSTER_CSV_URL` (mssv, name, email).
 - SMTP creds + Discord bot (token, guild, quyền manage role/channel) đã chuẩn bị (`deployment.md` §5–6).
+- `ADMINS` và `DISCORD_ADMIN_IDS` đã được cấu hình đúng.
 - DB đã backup.
 
 ## 3. Các pha
@@ -28,11 +29,9 @@
    - `mark-settings.bindings` — unique `(platform, platform_user_id)` và `(platform, mssv)` (ràng buộc 1:1:1), index `mssv` để lookup nhanh.
    - `mark-settings.verifications` — TTL index trên `expiry` (được lưu kiểu BSON Date).
    - `mark-settings.discord_mappings` — bảng ánh xạ Discord Role/Channel ID.
-4. Mở rộng `users`: loại bỏ vai trò Lecturer cũ (hệ thống chỉ còn `admin` và `student`). Mọi tài khoản cũ sẽ được unset `is_teacher` và gán mặc định `role: "student"`.
 
 ```js
 // ví dụ migration (Mongo shell)
-db.users.updateMany({}, {$set: {role: "student"}, $unset: {is_teacher: ""}})
 db.students.createIndex({email: 1}, {unique: true})
 db.bindings.createIndex({"platform":1,"platform_user_id":1}, {unique: true})
 db.bindings.createIndex({"platform":1,"mssv":1}, {unique: true})
@@ -51,7 +50,7 @@ db.verifications.createIndex({expiry: 1}, {expireAfterSeconds: 0})
 8. Up lại `tele` (bản mới): có `/bind`, `/mark [courseId]`, `/create`.
 9. **Breaking change:** `/mark` giờ yêu cầu bind (không nhận student_id). Thông báo trước cho người dùng.
    - Tuỳ chọn giảm sốc: giữ `/mark <courseId> <studentId>` cũ thêm 1 chu kỳ deprecation, song song với `/mark` mới.
-10. Admin thực hiện dùng `/create` để import lớp. Old Lecturer không còn quyền truy cập.
+10. Admin thực hiện dùng `/create` để import lớp; mọi quyền quản trị tiếp tục lấy từ `ADMINS` và `DISCORD_ADMIN_IDS`.
 
 ### Pha 4 — Vận hành
 
@@ -62,7 +61,7 @@ db.verifications.createIndex({expiry: 1}, {expireAfterSeconds: 0})
 
 - **Telegram**: revert image `tele` về v1 (trả lại `/mark <studentId>`, `/load`). Dữ liệu bindings không ảnh hưởng.
 - **Discord**: stop service `discord` (role/channel đã tạo ở lại guild, có thể dọn thủ công).
-- **Schema**: collection/index mới để nguyên (an toàn). Trường `role` để nguyên.
+- **Schema**: collection/index mới để nguyên (an toàn). Collection `users` legacy không bị ảnh hưởng.
 - Roster/mark data v1 không bị sửa bởi v2 → an toàn.
 
 ## 5. Rủi ro & giảm nhẹ

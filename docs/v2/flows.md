@@ -62,7 +62,7 @@ Admin /create
   │
   ▼
 [markimport.FetchMarkLinkIntoCourse]
-  • UpdateCourseLink(courseId, link, owner)
+  • upsert course link + metadata đồng bộ
   • DownloadCSV(link) → CleanRawCsvRecords (định dạng 3 dòng)
   • xóa mark cũ → insert mark mới (per-course collection)
   • UpdateCourseRecordCount
@@ -106,7 +106,7 @@ for mỗi Class:
   • map MSSV → Discord userID qua binding (platform=discord, bỏ qua các MSSV chưa bind)
   • current  = discord.Bot.MembersWithRole(discordRoleId)  (sử dụng roleID đã lấy)
   • toAdd    = enrolled_ids \ current
-  • toRemove = current \ enrolled_ids (bỏ qua các thành viên có quyền Admin hệ thống)
+  • toRemove = current \ enrolled_ids
   • AssignRole / RemoveRole (sử dụng discordRoleId)
 ```
 
@@ -145,10 +145,10 @@ markimport.FetchMarkLinkIntoCourse (tải lại CSV)
 classsync reconcile role ngay (như §5 cho 1 lớp)
 ```
 
-## 8. `/delete <courseId>`
+## 8. Telegram `/clear <courseId>`
 
 ```text
-Admin /delete
+Admin /clear
   │
   ▼
 [iam] kiểm quyền Admin
@@ -156,11 +156,6 @@ Admin /delete
   ▼
 • course.RemoveCourse(courseId)
 • mark.RemoveCourseMarks(courseId)  (drop collection)
-• xóa bản ghi tương ứng trong discord_mappings
-  │
-  ▼ (Discord)
-  • discord.Bot.DeleteChannel(discordChannelId) (sử dụng channelID lấy từ discord_mappings)
-  • discord.Bot.DeleteRole(discordRoleId) (sử dụng roleID lấy từ discord_mappings)
 ```
 
-> Telegram `/clear <courseId>` (v1) thực hiện phần DB (xóa lớp + marks), không tự động dọn dẹp Discord. Khuyến nghị: Admin nên thực hiện xóa lớp từ Discord bằng lệnh `/delete` để tránh để lại role/channel mồ côi trên Discord Guild.
+> `/clear` chỉ dọn dữ liệu backend. Role/channel Discord và bản ghi `discord_mappings` không bị xoá tự động trong phạm vi v2 hiện tại; nếu cần, Admin dọn thủ công ngoài hệ thống.

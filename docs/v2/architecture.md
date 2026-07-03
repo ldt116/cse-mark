@@ -44,7 +44,7 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 |---|---|---|
 | `domain/course` | hiện có | entity Class, `Repository`, `Rules` |
 | `domain/discordmapping` | **mới** | entity DiscordMapping `Model{CourseId, DiscordRoleId, DiscordChannelId}`, `Repository` |
-| `domain/user` | **mở rộng** | `Model` (thêm `Role`), `Repository` |
+| `domain/user` | hiện có (legacy v1) | không tham gia phân quyền v2 |
 | `domain/mark` | hiện có | `Repository` (per-course) |
 | `domain/downloader` | hiện có | `Repository.DownloadCSV` |
 | `domain/teleuser` | hiện có | validation |
@@ -58,7 +58,7 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 
 | Gói | Trạng thái | Vai trò |
 |---|---|---|
-| `usecases/iam` | **mở rộng** | `AuthzService`: `CanEditCourse`, `IsAdmin` (kiểm tra whitelist config hoặc `Role == admin` trong DB sau khi map platformUserID qua `bindings`) |
+| `usecases/iam` | **mở rộng** | `AuthzService`: `IsAdmin` (kiểm tra whitelist config theo platform UserID); các thao tác quản trị dùng chung check này |
 | `usecases/coursequery` | hiện có | `ActiveCourseService` |
 | `usecases/markimport` | hiện có | download + parse + import marks |
 | `usecases/marksync` | hiện có | scheduler mark sync 10p |
@@ -72,7 +72,7 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 |---|---|
 | `delivery/api` | hiện có (Gin) |
 | `delivery/tele` | hiện có + handler `/bind` + sửa `/mark` |
-| `delivery/discord` | **mới** (discordgo) — `/bind /profile /mark /create /sync /delete` + middleware auth theo binding |
+| `delivery/discord` | **mới** (discordgo) — `/bind /profile /mark /create /sync` + middleware auth theo binding và admin whitelist |
 
 ### 3.4 Infra
 
@@ -92,8 +92,6 @@ type Bot interface {
     // Provisioning (trả về ID để lưu DB)
     EnsureRole(ctx context.Context, name string) (roleID string, err error)
     EnsureChannel(ctx context.Context, name string, roleID string) (channelID string, err error)
-    DeleteRole(ctx context.Context, roleID string) error
-    DeleteChannel(ctx context.Context, channelID string) error
 
     // Role membership (sử dụng roleID đã lưu)
     AssignRole(ctx context.Context, userID string, roleID string) error
@@ -123,15 +121,15 @@ Mỗi service compose đúng những thứ cần:
 - **api** (giữ nguyên): config → mongo client → MarkRepo → handlers → ApiService.
 - **fetcher** (mở rộng): + RosterRepo + StudentRepo + `rostersync.Service`. Scheduler chạy cả mark sync và roster sync.
 - **tele** (mở rộng): + StudentRepo + BindingRepo + VerificationRepo + `identity.Service` + `email.Sender` (gửi OTP). Handler `/bind` + `/mark` dùng binding.
-- **discord** (mới): giống tele + CourseRepo + `discord.Bot` + `classsync.Service` (role-sync scheduler).
+- **discord** (mới): giống tele + CourseRepo + DiscordMappingRepo + `discord.Bot` + `classsync.Service` (role-sync scheduler).
 
 > SMTP/Email và Discord là phụ thuộc delivery-side; chỉ `tele` và `discord` cần `email.Sender` và `discord.Bot`.
 
 ## 6. Đồ thị luồng dữ liệu (tóm tắt)
 
 ```text
-Roster CSV ──fetcher──▶ student repo ──▶ identity.BindVerify (email→MSSV)
+Roster CSV ──fetcher──▶ student repo ──▶ identity.BindStart/BindVerify
 Class CSV  ──fetcher──▶ mark cache ──▶ enrollment ──▶ classsync ──▶ discord.Bot (role)
                                           │
-/mark  ──tele/discord──▶ identity.GetBinding(MSSV) ──▶ mark repo ──▶ reply
+/mark  ──tele/discord──▶ identity.GetBinding(PlatformUserID) ──▶ mark repo ──▶ reply
 ```

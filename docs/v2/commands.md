@@ -14,7 +14,7 @@ Quy ước: `<bắt buộc>` `[tùy chọn]`. Trả lời nhạy cảm (điểm)
 | `/mark <courseId>` | Đã bind | Điểm của một môn. |
 | `/create <courseId> <csvUrl>` | Admin | Tạo/cập nhật lớp + import marks (đổi tên từ `/load`). |
 | `/clear <courseId>` | Admin | Xoá lớp + marks. |
-| `/my` | Admin | Profile + danh sách lớp quản lý. |
+| `/my` | Admin | Profile + danh sách toàn bộ lớp trong hệ thống. |
 
 ### Telegram — ví dụ
 
@@ -49,7 +49,6 @@ Lab 2    9
 | `/mark <courseId>` | Student | Điểm một môn (ephemeral). |
 | `/create <courseId> <csvUrl>` | Admin | Import + đảm bảo role/channel tồn tại (tạo theo tên nếu thiếu, lưu vào `discord_mappings`). |
 | `/sync <courseId>` | Admin | Tải lại CSV + reconcile role ngay. |
-| `/delete <courseId>` | Admin | Xoá lớp + marks + archive/xoá channel & role. |
 
 ### Discord — ví dụ
 
@@ -77,9 +76,9 @@ Lab 1   10
 | Chức năng | Telegram | Discord |
 |---|---|---|
 | Bind email→MSSV | `/bind` | `/bind` |
-| Xem profile | `/my` (admin) | `/profile` (student) |
+| Xem thông tin | `/my` (admin) | `/profile` (student) |
 | Tra điểm | `/mark [courseId]` | `/mark [courseId]` |
 | Tạo/cập lớp | `/create` | `/create` (+provision) |
 | Sync ngay | — | `/sync` |
-| Xoá lớp | `/clear` | `/delete` (+xoá role/channel) |
+| Dọn dữ liệu lớp | `/clear` | — |
 | Quản role | — | tự động (role-sync) |

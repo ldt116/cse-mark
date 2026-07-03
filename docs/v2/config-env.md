@@ -11,7 +11,8 @@
 | `DB_MARK` | `mark-cse` | DB chứa mark cache (per-course collection) |
 | `DB_SETTINGS` | `mark-settings` | DB chứa cấu hình/identity |
 | `DB_SETTINGS_COURSES` | `courses` | collection Class |
-| `DB_SETTINGS_USERS` | `users` | collection User/Account |
+| `DB_SETTINGS_USERS` | `users` | collection legacy v1, không dùng cho auth v2 |
+| `DB_SETTINGS_DISCORD_MAPPINGS` | `discord_mappings` | **mới** — collection DiscordMapping |
 | `DB_SETTINGS_STUDENTS` | `students` | **mới** — collection Student (roster) |
 | `DB_SETTINGS_BINDINGS` | `bindings` | **mới** — collection Binding |
 | `DB_SETTINGS_VERIFICATIONS` | `verifications` | **mới** — collection Verification (TTL) |
@@ -74,7 +75,8 @@ type Config struct {
     CourseActiveAge, DownloaderTimeout, DbTransactionTimeout time.Duration
 
     // v2 — Mongo collections
-    DbSettingsStudents, DbSettingsBindings, DbSettingsVerifications string
+    DbSettingsDiscordMappings, DbSettingsStudents string
+    DbSettingsBindings, DbSettingsVerifications   string
     // v2 — Discord
     DiscordToken, DiscordGuildId string; DiscordAdminIds []string
     // v2 — Email/OTP
@@ -85,7 +87,7 @@ type Config struct {
 }
 ```
 
-Load helper dùng lại `loadEnv` / `loadEnvJsonSlice` hiện có.
+`DB_SETTINGS_USERS` được giữ để tương thích với dữ liệu v1, nhưng auth v2 không còn phụ thuộc vào collection này. Load helper dùng lại `loadEnv` / `loadEnvJsonSlice` hiện có.
 
 ## 8. Quản lý secret
 
@@ -98,6 +100,7 @@ MONGO_HOST=localhost
 MONGO_PORT=27017
 DB_MARK=mark-cse
 DB_SETTINGS=mark-settings
+DB_SETTINGS_DISCORD_MAPPINGS=discord_mappings
 API_PORT=8080
 OTP_LEN=6
 OTP_TTL=5m
