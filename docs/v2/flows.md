@@ -55,10 +55,10 @@ upsert student repo (theo MSSV); cập nhật name/email
 ## 3. Tạo/cập nhật lớp — `/create <courseId> <csvUrl>`
 
 ```text
-Lecturer /create
+Admin /create
   │
   ▼
-[iam] kiểm quyền Lecturer (và sở hữu nếu sửa lớp có sẵn)
+[iam] kiểm quyền Admin
   │
   ▼
 [markimport.FetchMarkLinkIntoCourse]
@@ -70,7 +70,7 @@ Lecturer /create
   ▼ (Discord) [provisioning]
   • discord.Bot.EnsureRole(courseId)   → roleID
   • discord.Bot.EnsureChannel(lowercase(courseId), roleID) → channelID
-  • lưu roleID và channelID vào database Class
+  • lưu roleID và channelID vào database discord_mappings
   │
   ▼ (Discord) [classsync] reconcile role ngay
 ```
@@ -98,15 +98,15 @@ Cập nhật mark cache + enrollment (implicit).
   │
   ▼
 for mỗi Class:
-  • kiểm tra Class có lưu discordRoleId hay không
+  • tra cứu discord_mappings lấy discordRoleId
        └─ không có (chưa /create trên Discord) → bỏ qua
   ▼
 [classsync]
   • enrolled = MSSV set từ mark cache của lớp
   • map MSSV → Discord userID qua binding (platform=discord, bỏ qua các MSSV chưa bind)
-  • current  = discord.Bot.MembersWithRole(discordRoleId)  (sử dụng roleID đã lưu)
+  • current  = discord.Bot.MembersWithRole(discordRoleId)  (sử dụng roleID đã lấy)
   • toAdd    = enrolled_ids \ current
-  • toRemove = current \ enrolled_ids (bỏ qua các thành viên có role Lecturer/Admin hệ thống)
+  • toRemove = current \ enrolled_ids (bỏ qua các thành viên có quyền Admin hệ thống)
   • AssignRole / RemoveRole (sử dụng discordRoleId)
 ```
 
@@ -133,10 +133,10 @@ reply (Discord: ephemeral; Telegram: reply thường)
 ## 7. `/sync <courseId>` (Discord)
 
 ```text
-Lecturer /sync
+Admin /sync
   │
   ▼
-[iam] kiểm quyền sở hữu lớp (lấy MSSV của lecturer qua binding, so sánh với ByUser của Class)
+[iam] kiểm quyền Admin
   │
   ▼
 markimport.FetchMarkLinkIntoCourse (tải lại CSV)
@@ -148,18 +148,19 @@ classsync reconcile role ngay (như §5 cho 1 lớp)
 ## 8. `/delete <courseId>`
 
 ```text
-Lecturer/Admin /delete
+Admin /delete
   │
   ▼
-[iam] kiểm quyền (admin hoặc lecturer sở hữu lớp)
+[iam] kiểm quyền Admin
   │
   ▼
 • course.RemoveCourse(courseId)
 • mark.RemoveCourseMarks(courseId)  (drop collection)
+• xóa bản ghi tương ứng trong discord_mappings
   │
   ▼ (Discord)
-  • discord.Bot.DeleteChannel(discordChannelId) (sử dụng channelID đã lưu)
-  • discord.Bot.DeleteRole(discordRoleId) (sử dụng roleID đã lưu)
+  • discord.Bot.DeleteChannel(discordChannelId) (sử dụng channelID lấy từ discord_mappings)
+  • discord.Bot.DeleteRole(discordRoleId) (sử dụng roleID lấy từ discord_mappings)
 ```
 
-> Telegram `/clear <courseId>` (v1) thực hiện phần DB (xóa lớp + marks), không tự động dọn dẹp Discord. Khuyến nghị: Giảng viên nên thực hiện xóa lớp từ Discord bằng lệnh `/delete` để tránh để lại role/channel mồ côi trên Discord Guild.
+> Telegram `/clear <courseId>` (v1) thực hiện phần DB (xóa lớp + marks), không tự động dọn dẹp Discord. Khuyến nghị: Admin nên thực hiện xóa lớp từ Discord bằng lệnh `/delete` để tránh để lại role/channel mồ côi trên Discord Guild.

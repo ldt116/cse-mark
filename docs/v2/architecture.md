@@ -42,8 +42,9 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 
 | Gói | Trạng thái | Nội dung |
 |---|---|---|
-| `domain/course` | **mở rộng** | entity Class (thêm `DiscordRoleId`, `DiscordChannelId`), `Repository` (hỗ trợ lưu ID), `Rules` |
-| `domain/user` | **mở rộng** | `Model` (thêm `Role`), `Repository` (hỗ trợ query theo `MSSV` / `_id` cũ) |
+| `domain/course` | hiện có | entity Class, `Repository`, `Rules` |
+| `domain/discordmapping` | **mới** | entity DiscordMapping `Model{CourseId, DiscordRoleId, DiscordChannelId}`, `Repository` |
+| `domain/user` | **mở rộng** | `Model` (thêm `Role`), `Repository` |
 | `domain/mark` | hiện có | `Repository` (per-course) |
 | `domain/downloader` | hiện có | `Repository.DownloadCSV` |
 | `domain/teleuser` | hiện có | validation |
@@ -57,7 +58,7 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 
 | Gói | Trạng thái | Vai trò |
 |---|---|---|
-| `usecases/iam` | **mở rộng** | `AuthzService`: `CanEditCourse`, `IsTeacher` (chuyển sang phân quyền theo `MSSV` sau khi map platformUserID qua `bindings`; hỗ trợ fallback Telegram username cũ) |
+| `usecases/iam` | **mở rộng** | `AuthzService`: `CanEditCourse`, `IsAdmin` (kiểm tra whitelist config hoặc `Role == admin` trong DB sau khi map platformUserID qua `bindings`) |
 | `usecases/coursequery` | hiện có | `ActiveCourseService` |
 | `usecases/markimport` | hiện có | download + parse + import marks |
 | `usecases/marksync` | hiện có | scheduler mark sync 10p |
@@ -77,7 +78,7 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 
 | Gói | Trạng thái |
 |---|---|
-| `infra/mongo` | hiện có + repo mới: `student`, `binding`, `verification` (TTL Date) |
+| `infra/mongo` | hiện có + repo mới: `student`, `binding`, `verification` (TTL Date), `discord_mapping` |
 | `infra/http` | hiện có (`SimpleDownloader`) |
 | `infra/discord` | **mới** — `discordgo` client implement `discord.Bot` (hỗ trợ rate-limit backoff) |
 | `infra/email` | **mới** — SMTP implement `email.Sender` |
@@ -101,7 +102,7 @@ type Bot interface {
 }
 ```
 
-- Các ID `roleID` và `channelID` được lưu trực tiếp vào collection `courses` trong database sau khi tạo thành công.
+- Các ID `roleID` và `channelID` được lưu trực tiếp vào collection `discord_mappings` trong database sau khi tạo thành công.
 - Naming: role = `courseId`; channel = `lowercase(courseId)`.
 - **Cơ chế xử lý Rate-Limit:** `infra/discord` bọc client `discordgo` với cơ chế hàng đợi lệnh (command queue) và tự động tạm dừng (sleep) theo header `Retry-After` khi gặp lỗi HTTP 429 từ Discord API, đảm bảo tiến trình scheduler đồng bộ không bị ngắt quãng đột ngột.
 

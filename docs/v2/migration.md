@@ -27,12 +27,12 @@
    - `mark-settings.students` — unique index `email`.
    - `mark-settings.bindings` — unique `(platform, platform_user_id)` và `(platform, mssv)` (ràng buộc 1:1:1), index `mssv` để lookup nhanh.
    - `mark-settings.verifications` — TTL index trên `expiry` (được lưu kiểu BSON Date).
-4. Mở rộng `users`: thêm trường `role` (default `student`), dọn dẹp trường cũ `is_teacher` (IsTeacher=true → role=lecturer).
+   - `mark-settings.discord_mappings` — bảng ánh xạ Discord Role/Channel ID.
+4. Mở rộng `users`: loại bỏ vai trò Lecturer cũ (hệ thống chỉ còn `admin` và `student`). Mọi tài khoản cũ sẽ được unset `is_teacher` và gán mặc định `role: "student"`.
 
 ```js
 // ví dụ migration (Mongo shell)
-db.users.updateMany({is_teacher: true}, {$set: {role: "lecturer"}, $unset: {is_teacher: ""}})
-db.users.updateMany({role: {$exists: false}}, {$set: {role: "student"}})
+db.users.updateMany({}, {$set: {role: "student"}, $unset: {is_teacher: ""}})
 db.students.createIndex({email: 1}, {unique: true})
 db.bindings.createIndex({"platform":1,"platform_user_id":1}, {unique: true})
 db.bindings.createIndex({"platform":1,"mssv":1}, {unique: true})
@@ -51,7 +51,7 @@ db.verifications.createIndex({expiry: 1}, {expireAfterSeconds: 0})
 8. Up lại `tele` (bản mới): có `/bind`, `/mark [courseId]`, `/create`.
 9. **Breaking change:** `/mark` giờ yêu cầu bind (không nhận student_id). Thông báo trước cho người dùng.
    - Tuỳ chọn giảm sốc: giữ `/mark <courseId> <studentId>` cũ thêm 1 chu kỳ deprecation, song song với `/mark` mới.
-10. Lecturer cũ (`role=lecturer` từ Pha 1) tiếp tục dùng `/create`.
+10. Admin thực hiện dùng `/create` để import lớp. Old Lecturer không còn quyền truy cập.
 
 ### Pha 4 — Vận hành
 

@@ -12,10 +12,9 @@ Quy ước: `<bắt buộc>` `[tùy chọn]`. Trả lời nhạy cảm (điểm)
 | `/bind` | Guest | Bind email→MSSV (xem `flows.md` §1). |
 | `/mark` | Đã bind | Tổng điểm mọi lớp đang học của MSSV đã bind. |
 | `/mark <courseId>` | Đã bind | Điểm của một môn. |
-| `/create <courseId> <csvUrl>` | Lecturer | Tạo/cập nhật lớp + import marks (đổi tên từ `/load`). |
-| `/clear <courseId>` | Lecturer | Xoá lớp + marks. |
-| `/my` | Lecturer | Profile + danh sách lớp quản lý. |
-| `/teacher <username> [0\|1]` | Admin | Cấp (mặc định) / gỡ quyền Lecturer. |
+| `/create <courseId> <csvUrl>` | Admin | Tạo/cập nhật lớp + import marks (đổi tên từ `/load`). |
+| `/clear <courseId>` | Admin | Xoá lớp + marks. |
+| `/my` | Admin | Profile + danh sách lớp quản lý. |
 
 ### Telegram — ví dụ
 
@@ -37,7 +36,7 @@ Lab 2    9
 ### Telegram — lỗi thường
 
 - `/mark` khi chưa bind → "Chưa xác thực, dùng /bind".
-- `/create` không phải Lecturer → UnauthorizedError.
+- `/create` không phải Admin → UnauthorizedError.
 - `courseId` sai định dạng → ArgValueMismatchError.
 
 ## Discord
@@ -48,9 +47,9 @@ Lab 2    9
 | `/profile` | Student | MSSV, họ tên, email, danh sách lớp, trạng thái bind (ephemeral). |
 | `/mark` | Student | Tổng điểm mọi lớp (ephemeral). |
 | `/mark <courseId>` | Student | Điểm một môn (ephemeral). |
-| `/create <courseId> <csvUrl>` | Lecturer | Import + đảm bảo role/channel tồn tại (tạo theo tên nếu thiếu). |
-| `/sync <courseId>` | Lecturer | Tải lại CSV + reconcile role ngay. |
-| `/delete <courseId>` | Lecturer/Admin | Xoá lớp + marks + archive/xoá channel & role. |
+| `/create <courseId> <csvUrl>` | Admin | Import + đảm bảo role/channel tồn tại (tạo theo tên nếu thiếu, lưu vào `discord_mappings`). |
+| `/sync <courseId>` | Admin | Tải lại CSV + reconcile role ngay. |
+| `/delete <courseId>` | Admin | Xoá lớp + marks + archive/xoá channel & role. |
 
 ### Discord — ví dụ
 
@@ -78,7 +77,7 @@ Lab 1   10
 | Chức năng | Telegram | Discord |
 |---|---|---|
 | Bind email→MSSV | `/bind` | `/bind` |
-| Xem profile | `/my` (lecturer) | `/profile` (student) |
+| Xem profile | `/my` (admin) | `/profile` (student) |
 | Tra điểm | `/mark [courseId]` | `/mark [courseId]` |
 | Tạo/cập lớp | `/create` | `/create` (+provision) |
 | Sync ngay | — | `/sync` |

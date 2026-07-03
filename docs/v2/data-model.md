@@ -28,7 +28,7 @@ Ràng buộc độc nhất (Unique Indexes):
 - Unique index 1: `(platform, platform_user_id)` để đảo ngược lookup nhanh từ tài khoản chat sang MSSV.
 - Unique index 2: `(platform, mssv)` để đảm bảo một MSSV chỉ liên kết với tối đa 1 ID chat trên mỗi nền tảng (quan hệ 1:1:1).
 
-### Class (= entity `course`, mở rộng v1)
+### Class (= entity `course`, giữ nguyên v1)
 
 | Trường | Kiểu | bson | Ghi chú |
 |---|---|---|---|
@@ -37,8 +37,14 @@ Ràng buộc độc nhất (Unique Indexes):
 | ByTeleId/ByTeleUser | int64/string | `by_id` / `by_user` | Telegram owner |
 | UpdatedAt | int64 | `updated_at` | |
 | RecordCnt | int64 | `record_cnt` | |
-| DiscordRoleId | string | `discord_role_id` | Mới - ID của role lớp trên Discord |
-| DiscordChannelId | string | `discord_channel_id` | Mới - ID của channel lớp trên Discord |
+
+### DiscordMapping (mới)
+
+| Trường | Kiểu | bson | Ghi chú |
+|---|---|---|---|
+| CourseId | string | `_id` | khóa chính (trùng khớp với CourseId của Class) |
+| DiscordRoleId | string | `discord_role_id` | |
+| DiscordChannelId | string | `discord_channel_id` | |
 
 ### Enrollment (phái sinh, không collection riêng)
 
@@ -66,7 +72,7 @@ Tự xoá qua **TTL index** (`expireAfterSeconds: 0`).
 | Trường | Kiểu | bson | Ghi chú |
 |---|---|---|---|
 | MSSV/UserId | string | `_id` (`user_id`) | Khóa chính (MSSV cho user mới, Telegram username cho user cũ) |
-| Role | string | `role` | `admin` \| `lecturer` \| `student` |
+| Role | string | `role` | `admin` \| `student` |
 | GrantedBy | string | `granted_by` | |
 
 ## 2. CSDL / Collection MongoDB
@@ -74,8 +80,9 @@ Tự xoá qua **TTL index** (`expireAfterSeconds: 0`).
 | DB | Collection | Entity | Ghi chú |
 |---|---|---|---|
 | `mark-cse` | `<courseId>` (mỗi lớp 1 collection) | Mark cache | v1 |
-| `mark-settings` | `courses` | Class | v1 (`DB_SETTINGS_COURSES`), mở rộng thêm Discord IDs |
-| `mark-settings` | `users` | User/Account | v1 (`DB_SETTINGS_USERS`), mở rộng role |
+| `mark-settings` | `courses` | Class | v1 (`DB_SETTINGS_COURSES`) |
+| `mark-settings` | `discord_mappings` | DiscordMapping | **mới** (bảng liên kết Discord IDs) |
+| `mark-settings` | `users` | User/Account | v1 (`DB_SETTINGS_USERS`), mở rộng role (admin/student) |
 | `mark-settings` | `students` | Student | **mới** |
 | `mark-settings` | `bindings` | Binding | **mới** |
 | `mark-settings` | `verifications` | Verification | **mới** (TTL) |
@@ -92,6 +99,7 @@ v1 hiện không có index ngoài `_id`. v2 thêm:
   - Unique index trên `(platform, mssv)` (dành cho ràng buộc 1:1:1).
   - Index trên `mssv` (để hỗ trợ liệt kê tất cả bindings của 1 MSSV).
 - `verifications`: **TTL index** trên `expiry` (kiểu Date, tự xoá OTP sau khi hết hạn).
+- `discord_mappings`: index độc nhất ngầm định của `_id` (CourseId).
 - `courses`: index trên `updated_at` (đã dùng ngầm bởi `FindCoursesUpdatedAfter`).
 - mark collections: index `_id` (MSSV) — đủ cho `GetMark(courseId, studentId)`.
 
