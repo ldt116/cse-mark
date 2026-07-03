@@ -3,6 +3,7 @@ package configs
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -24,6 +25,31 @@ type Config struct {
 
 	ApiToken string
 	ApiPort  string
+
+	// v2 — Mongo collections (mark-settings DB)
+	DbSettingsStudents        string
+	DbSettingsBindings        string
+	DbSettingsVerifications   string
+	DbSettingsDiscordMappings string
+
+	// v2 — Discord
+	DiscordToken    string
+	DiscordGuildId  string
+	DiscordAdminIds []string
+
+	// v2 — Email / OTP
+	SmtpHost     string
+	SmtpPort     int
+	SmtpUsername string
+	SmtpPassword string
+	SmtpFrom     string
+	OtpLen       int
+	OtpTtl       time.Duration
+
+	// v2 — Sync
+	RosterCsvUrl       string
+	RosterSyncInterval time.Duration
+	RoleSyncInterval   time.Duration
 }
 
 func LoadConfig() *Config {
@@ -45,7 +71,56 @@ func LoadConfig() *Config {
 
 		ApiToken: loadEnv("API_TOKEN", ""),
 		ApiPort:  loadEnv("API_PORT", "8080"),
+
+		// v2 — Mongo collections
+		DbSettingsStudents:        loadEnv("DB_SETTINGS_STUDENTS", "students"),
+		DbSettingsBindings:        loadEnv("DB_SETTINGS_BINDINGS", "bindings"),
+		DbSettingsVerifications:   loadEnv("DB_SETTINGS_VERIFICATIONS", "verifications"),
+		DbSettingsDiscordMappings: loadEnv("DB_SETTINGS_DISCORD_MAPPINGS", "discord_mappings"),
+
+		// v2 — Discord
+		DiscordToken:    loadEnv("DISCORD_TOKEN", ""),
+		DiscordGuildId:  loadEnv("DISCORD_GUILD_ID", ""),
+		DiscordAdminIds: loadEnvJsonSlice("DISCORD_ADMIN_IDS", []string{}),
+
+		// v2 — Email / OTP
+		SmtpHost:     loadEnv("SMTP_HOST", ""),
+		SmtpPort:     loadEnvInt("SMTP_PORT", 587),
+		SmtpUsername: loadEnv("SMTP_USERNAME", ""),
+		SmtpPassword: loadEnv("SMTP_PASSWORD", ""),
+		SmtpFrom:     loadEnv("SMTP_FROM", ""),
+		OtpLen:       loadEnvInt("OTP_LEN", 6),
+		OtpTtl:       loadEnvDuration("OTP_TTL", 5*time.Minute),
+
+		// v2 — Sync
+		RosterCsvUrl:       loadEnv("ROSTER_CSV_URL", ""),
+		RosterSyncInterval: loadEnvDuration("ROSTER_SYNC_INTERVAL", 24*time.Hour),
+		RoleSyncInterval:   loadEnvDuration("ROLE_SYNC_INTERVAL", 30*time.Minute),
 	}
+}
+
+func loadEnvInt(key string, defaultValue int) int {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultValue
+	}
+	parsed, err := strconv.Atoi(val)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
+}
+
+func loadEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultValue
+	}
+	parsed, err := time.ParseDuration(val)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
 }
 
 func loadEnvJsonSlice[T any](key string, defaultValue []T) []T {
