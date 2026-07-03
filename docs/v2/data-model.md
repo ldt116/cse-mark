@@ -106,7 +106,7 @@ v1 hiện không có index ngoài `_id`. v2 thêm:
 
 ## 4. Quy ước đặt tên (Discord)
 
-Discord role/channel được resolve **theo tên** (không lưu ID):
+Role/channel được **đặt tên theo `courseId`** khi tạo lần đầu qua `/create`; `discordRoleId`/`discordChannelId` thu được được **lưu vào collection `discord_mappings`**. Các thao tác sau đó (sync role, gán/gỡ thành viên) **dùng trực tiếp ID đã lưu**, không resolve lại theo tên mỗi lần (tránh gọi Discord API dư thừa → rate-limit):
 
 | Đối tượng | Quy tắc | Ví dụ (`courseId=CO2003-L01`) |
 |---|---|---|

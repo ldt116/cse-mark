@@ -289,7 +289,7 @@ Lịch định kỳ riêng (**mặc định hàng ngày**, cấu hình qua env):
 
 ## 10.3 Role sync (mới, `discord` service)
 
-Scheduler định kỳ: với mỗi lớp **đã có role Discord** (resolve theo tên), tính enrollment → diff role thành viên → gán/gỡ qua `discord.Bot` (xem §14).
+Scheduler định kỳ: với mỗi lớp **đã có bản ghi `discord_mappings`** (đã `/create` trên Discord), tính enrollment → diff role thành viên → gán/gỡ qua `discord.Bot` dùng `discordRoleId` đã lưu (xem §14).
 
 > Việc thêm/rút học phần được phản ánh tự động ở lần đồng bộ tiếp theo (mark sync cập nhật enrollment → role sync cập nhật role).
 
@@ -418,7 +418,7 @@ discord.Bot: gán role cho enrolled, gỡ role cho học viên cũ
 
 - Một backend duy nhất cho Telegram và Discord.
 - Một lần bind (email → MSSV) cho toàn bộ quá trình học, dùng chung hai nền tảng.
-- Một role + một channel cho mỗi lớp (Discord), resolve theo tên `courseId`.
+- Một role + một channel cho mỗi lớp (Discord), đặt tên theo `courseId`; ID được lưu trong `discord_mappings`.
 - Một CSV cho mỗi lớp (Class CSV); một roster CSV cho toàn bộ sinh viên.
 - Excel/CSV là nguồn dữ liệu chính; backend/Discord chỉ hiển thị và phân quyền.
 - Bot chịu trách nhiệm đồng bộ; mọi thay đổi lớp học thực hiện trên Excel/CSV.
