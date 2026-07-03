@@ -10,6 +10,7 @@ Tính năng chính:
 
 - **v1 (hiện tại — Telegram mark bot):** xem [`docs/v1/`](docs/v1/) — `DEVELOPMENT.md`.
 - **v2 (đang triển khai — mở rộng Discord LMS trên cùng backend):** xem [`docs/v2/`](docs/v2/) — `SRS-v2.md` (đặc tả yêu cầu), kèm `architecture.md`, `data-model.md`, `flows.md`, `commands.md`, `config-env.md`, `deployment.md`, `migration.md`.
+- **Issue workflow:** xem [`docs/issue-workflow.md`](docs/issue-workflow.md) để biết cách dùng labels `area:*`, `topic:*`, `type`, và `status:*`.
 
 ## Screenshots
 
