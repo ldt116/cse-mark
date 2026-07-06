@@ -51,6 +51,7 @@ func indexSpecs() map[collectionKey][]indexSpec {
 		},
 		colVerifications: {
 			{Name: "ttl_expiry", Keys: bson.D{{Key: "expiry", Value: 1}}, TTLSeconds: &ttlZero},
+			{Name: "idx_email", Keys: bson.D{{Key: "email", Value: 1}}},
 		},
 	}
 }

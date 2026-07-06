@@ -154,6 +154,11 @@ func TestEnsureIndexes_CreatesExpectedIndexes(t *testing.T) {
 	if v["unique"] == true {
 		t.Error("verifications.ttl_expiry: must NOT be unique")
 	}
+	if ve := verifs["idx_email"]; ve == nil {
+		t.Fatal("verifications: idx_email index missing")
+	} else if ve["unique"] == true {
+		t.Error("verifications.idx_email: must NOT be unique")
+	}
 }
 
 func TestStudentRepo_RoundTripAndUniqueEmail(t *testing.T) {
@@ -259,6 +264,31 @@ func TestVerificationRepo_RoundTripAndExpiryDate(t *testing.T) {
 	}
 	if !dt.Time().Equal(expiry) {
 		t.Errorf("stored expiry value: want %v, got %v", expiry, dt.Time())
+	}
+
+	// Failed-attempt counter: atomic increment, and Upsert resets it.
+	n, err := repo.IncrementAttempts("u1")
+	if err != nil || n != 1 {
+		t.Errorf("IncrementAttempts #1: want 1, got %d (%v)", n, err)
+	}
+	if n, err := repo.IncrementAttempts("u1"); err != nil || n != 2 {
+		t.Errorf("IncrementAttempts #2: want 2, got %d (%v)", n, err)
+	}
+	if err := repo.Upsert(in); err != nil {
+		t.Fatalf("re-upsert (reset): %v", err)
+	}
+	if n, err := repo.IncrementAttempts("u1"); err != nil || n != 1 {
+		t.Errorf("after Upsert reset, IncrementAttempts: want 1, got %d (%v)", n, err)
+	}
+
+	// Per-email cooldown lookup.
+	if list, err := repo.FindByEmail("a@hcmut.edu.vn"); err != nil || len(list) != 1 {
+		t.Errorf("FindByEmail: want 1 record, got %d (%v)", len(list), err)
+	}
+
+	// IncrementAttempts on a missing record reports ErrNotFound.
+	if _, err := repo.IncrementAttempts("does-not-exist"); !errors.Is(err, verification.ErrNotFound) {
+		t.Errorf("IncrementAttempts missing: want ErrNotFound, got %v", err)
 	}
 }
 

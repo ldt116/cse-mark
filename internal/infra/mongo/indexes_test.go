@@ -76,6 +76,16 @@ func TestIndexSpecs(t *testing.T) {
 		t.Errorf("verifications.expiry expireAfterSeconds: want 0, got %d", *v.TTLSeconds)
 	}
 
+	// verifications: per-email lookup for the resend-cooldown (Sybil defense).
+	ve := findSpec(t, specs[colVerifications], "idx_email")
+	assertKeys(t, ve.Keys, "email")
+	if ve.Unique {
+		t.Error("verifications.email must NOT be unique")
+	}
+	if ve.TTLSeconds != nil {
+		t.Error("verifications.email must not be a TTL index")
+	}
+
 	// discord_mappings: only the implicit _id index — nothing to create.
 	if _, ok := specs[colDiscordMappings]; ok {
 		t.Error("discord_mappings must have no index specs (implicit _id only)")

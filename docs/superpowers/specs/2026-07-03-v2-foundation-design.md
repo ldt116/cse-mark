@@ -211,3 +211,25 @@ The new repo constructors are added to package `mongo` but **not** registered in
 - `cmd/api/main.go`, `cmd/fetcher/main.go`, `cmd/tele/main.go` (+ `EnsureIndexes` call, + `mongo` import)
 
 **Unchanged:** all `wire.go` / `wire_gen.go`, v1 domain/infra/delivery code.
+
+## 6. Addendum — OTP anti-abuse (added after review + owner direction)
+
+Owner confirmed the **15-min resend cooldown is a must**, **OTP validity = 15m**, and directed an **anti-abuse design** (reviewer Codex raised the resend-cooldown gap on PR #8). This addendum supersedes the earlier OTP defaults in §3.1 (was `OTP_TTL=5m`).
+
+**Policy (codified in `config-env.md` §4.1 and `SRS-v2.md` §6.1.1):**
+
+- `OTP_TTL` default `5m → 15m`; this is **also the resend-cooldown window** — a live (unexpired) `verification` record blocks resend, so "record present" ≡ "in cooldown". No separate cooldown state.
+- New config `OTP_MAX_ATTEMPTS` (default `5`) — brute-force cap.
+- Brute-force hole avoided: on reaching the cap, the OTP is **invalidated but the record is kept** (TTL still blocks resend) — so an attacker can't immediately re-request to get fresh attempts.
+- Per-`email` cooldown (Sybil defense): index `verifications.email`, max 1 OTP/email/`OTP_TTL`.
+
+**Foundation changes (this PR):**
+
+- `config`: `OTP_TTL=15m`; `OtpMaxAttempts int` (default 5).
+- `verification.Model`: `Attempts int bson:"attempts"`; `Upsert` resets it to `0` on each new OTP.
+- `verification.Repository`: `IncrementAttempts(platformUserID) (int, error)` — atomic `$inc`, returns new count; `FindByEmail(email) ([]Model, error)`.
+- index `verifications.idx_email` (non-unique).
+
+**Deferred to `usecases/identity`** (enforcement): check cooldown before send, `$inc` on wrong OTP, invalidate at `OtpMaxAttempts` (keep record), per-email check.
+
+**Branch:** rebased onto `origin/main` and PR #8 retargeted `docs/v2 → main` (the authoritative v2 specs now live on `main`; CI runs on `main`).

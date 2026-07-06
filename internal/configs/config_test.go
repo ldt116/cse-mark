@@ -11,7 +11,7 @@ var v2EnvKeys = []string{
 	"DB_SETTINGS_STUDENTS", "DB_SETTINGS_BINDINGS", "DB_SETTINGS_VERIFICATIONS", "DB_SETTINGS_DISCORD_MAPPINGS",
 	"DISCORD_TOKEN", "DISCORD_GUILD_ID", "DISCORD_ADMIN_IDS",
 	"SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_PORT",
-	"OTP_LEN", "OTP_TTL",
+	"OTP_LEN", "OTP_TTL", "OTP_MAX_ATTEMPTS",
 	"ROSTER_CSV_URL", "ROSTER_SYNC_INTERVAL", "ROLE_SYNC_INTERVAL",
 }
 
@@ -47,12 +47,15 @@ func TestLoadConfig_V2Defaults(t *testing.T) {
 		t.Errorf("SmtpPort: want 587, got %d", cfg.SmtpPort)
 	}
 
-	// OTP defaults.
+	// OTP defaults. TTL == resend-cooldown window (15m).
 	if cfg.OtpLen != 6 {
 		t.Errorf("OtpLen: want 6, got %d", cfg.OtpLen)
 	}
-	if cfg.OtpTtl != 5*time.Minute {
-		t.Errorf("OtpTtl: want 5m, got %v", cfg.OtpTtl)
+	if cfg.OtpTtl != 15*time.Minute {
+		t.Errorf("OtpTtl: want 15m, got %v", cfg.OtpTtl)
+	}
+	if cfg.OtpMaxAttempts != 5 {
+		t.Errorf("OtpMaxAttempts: want 5, got %d", cfg.OtpMaxAttempts)
 	}
 
 	// Sync defaults.
@@ -80,6 +83,7 @@ func TestLoadConfig_V2FromEnv(t *testing.T) {
 	t.Setenv("SMTP_FROM", "no-reply@example.com")
 	t.Setenv("OTP_LEN", "8")
 	t.Setenv("OTP_TTL", "10m")
+	t.Setenv("OTP_MAX_ATTEMPTS", "7")
 	t.Setenv("ROSTER_CSV_URL", "https://example.com/r.csv")
 	t.Setenv("ROSTER_SYNC_INTERVAL", "12h")
 	t.Setenv("ROLE_SYNC_INTERVAL", "15m")
@@ -107,6 +111,9 @@ func TestLoadConfig_V2FromEnv(t *testing.T) {
 	}
 	if cfg.OtpTtl != 10*time.Minute {
 		t.Errorf("OtpTtl: want 10m, got %v", cfg.OtpTtl)
+	}
+	if cfg.OtpMaxAttempts != 7 {
+		t.Errorf("OtpMaxAttempts: want 7, got %d", cfg.OtpMaxAttempts)
 	}
 	assertEqual(t, "RosterCsvUrl", cfg.RosterCsvUrl, "https://example.com/r.csv")
 	if cfg.RosterSyncInterval != 12*time.Hour {

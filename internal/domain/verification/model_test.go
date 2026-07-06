@@ -10,7 +10,7 @@ import (
 
 func TestModel_BsonRoundTrip(t *testing.T) {
 	expiry := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
-	in := Model{PlatformUserID: "999", Email: "a@hcmut.edu.vn", OTP: "123456", Expiry: expiry}
+	in := Model{PlatformUserID: "999", Email: "a@hcmut.edu.vn", OTP: "123456", Expiry: expiry, Attempts: 3}
 
 	raw, err := bson.Marshal(in)
 	if err != nil {
@@ -25,6 +25,11 @@ func TestModel_BsonRoundTrip(t *testing.T) {
 	// PlatformUserID is the _id key.
 	if doc["_id"] != "999" {
 		t.Errorf(`_id: want "999", got %v`, doc["_id"])
+	}
+
+	// Failed-attempt counter for brute-force protection.
+	if doc["attempts"] != int32(3) {
+		t.Errorf(`attempts: want 3, got %v`, doc["attempts"])
 	}
 
 	// CRITICAL for the TTL index: expiry must serialize as a BSON Date,

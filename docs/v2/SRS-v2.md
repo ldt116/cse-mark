@@ -177,6 +177,15 @@ Cơ chế: Mặc định khi bind thành công.
 4. SV nhập OTP.
 5. Bot kiểm OTP + expiry và thực hiện lưu `binding` (platform + platformUserID ↔ MSSV, verified).
 
+### 6.1.1 Chống lạm dụng OTP (must)
+
+OTP là kênh xác thực duy nhất qua email nên phải chống lạm dụng. Chính sách (chi tiết config ở `config-env.md` §4–4.1):
+
+- **Resend cooldown = `OTP_TTL` (mặc định 15m):** trong khi bản ghi `verification` của `platformUserID` chưa hết hạn, từ chối gửi lại OTP (tránh email bombing cùng user). Vì TTL = 15m và cooldown = 15m, "còn bản ghi" ≡ "đang trong cooldown".
+- **Cooldown theo email (chống Sybil):** tối đa 1 OTP/email/`OTP_TTL` bất kể `platformUserID`, để kẻ tấn công không spam một hộp thư từ nhiều tài khoản.
+- **Chống brute-force (`OTP_MAX_ATTEMPTS`, mặc định 5):** mỗi lần nhập sai tăng bộ đếm `attempts`; khi đạt ngưỡng, OTP bị **vô hiệu hoá nhưng bản ghi được giữ** tới hết `OTP_TTL` — buộc chờ hết cooldown mới nhận lại OTP (không cho request lại ngay để nhận thêm lượt đoán).
+- Cơ chế enforce thuộc use case `identity`; nền tảng (task #8) cung cấp config (`OTP_TTL`, `OTP_MAX_ATTEMPTS`), schema (`verification.attempts`) và index `verifications.email`.
+
 ## 6.2 Sau bind — Discord
 
 Bot tính tất cả lớp học của SV (từ enrollment) và cấp toàn bộ role tương ứng (xem §14). SV lập tức thấy các class channel.

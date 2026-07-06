@@ -38,13 +38,14 @@ type Config struct {
 	DiscordAdminIds []string
 
 	// v2 — Email / OTP
-	SmtpHost     string
-	SmtpPort     int
-	SmtpUsername string
-	SmtpPassword string
-	SmtpFrom     string
-	OtpLen       int
-	OtpTtl       time.Duration
+	SmtpHost       string
+	SmtpPort       int
+	SmtpUsername   string
+	SmtpPassword   string
+	SmtpFrom       string
+	OtpLen         int
+	OtpTtl         time.Duration
+	OtpMaxAttempts int
 
 	// v2 — Sync
 	RosterCsvUrl       string
@@ -84,13 +85,14 @@ func LoadConfig() *Config {
 		DiscordAdminIds: loadEnvJsonSlice("DISCORD_ADMIN_IDS", []string{}),
 
 		// v2 — Email / OTP
-		SmtpHost:     loadEnv("SMTP_HOST", ""),
-		SmtpPort:     loadEnvInt("SMTP_PORT", 587),
-		SmtpUsername: loadEnv("SMTP_USERNAME", ""),
-		SmtpPassword: loadEnv("SMTP_PASSWORD", ""),
-		SmtpFrom:     loadEnv("SMTP_FROM", ""),
-		OtpLen:       loadEnvInt("OTP_LEN", 6),
-		OtpTtl:       loadEnvDuration("OTP_TTL", 5*time.Minute),
+		SmtpHost:       loadEnv("SMTP_HOST", ""),
+		SmtpPort:       loadEnvInt("SMTP_PORT", 587),
+		SmtpUsername:   loadEnv("SMTP_USERNAME", ""),
+		SmtpPassword:   loadEnv("SMTP_PASSWORD", ""),
+		SmtpFrom:       loadEnv("SMTP_FROM", ""),
+		OtpLen:         loadEnvInt("OTP_LEN", 6),
+		OtpTtl:         loadEnvDuration("OTP_TTL", 15*time.Minute),
+		OtpMaxAttempts: loadEnvInt("OTP_MAX_ATTEMPTS", 5),
 
 		// v2 — Sync
 		RosterCsvUrl:       loadEnv("ROSTER_CSV_URL", ""),
