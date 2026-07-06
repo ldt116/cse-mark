@@ -76,11 +76,12 @@ func TestIndexSpecs(t *testing.T) {
 		t.Errorf("verifications.expiry expireAfterSeconds: want 0, got %d", *v.TTLSeconds)
 	}
 
-	// verifications: per-email lookup for the resend-cooldown (Sybil defense).
-	ve := findSpec(t, specs[colVerifications], "idx_email")
+	// verifications: UNIQUE email — atomic per-email cooldown (at most one live
+	// OTP per email; a concurrent duplicate insert is rejected at the DB level).
+	ve := findSpec(t, specs[colVerifications], "uniq_email")
 	assertKeys(t, ve.Keys, "email")
-	if ve.Unique {
-		t.Error("verifications.email must NOT be unique")
+	if !ve.Unique {
+		t.Error("verifications.email MUST be unique (atomic per-email cooldown)")
 	}
 	if ve.TTLSeconds != nil {
 		t.Error("verifications.email must not be a TTL index")

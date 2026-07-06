@@ -47,10 +47,10 @@
 
 ## 4.1. Chính sách chống lạm dụng OTP
 
-- **Resend cooldown = `OTP_TTL` (15m mặc định):** nếu đã có bản ghi `verification` chưa hết hạn cho `platformUserID` thì từ chối gửi lại. Vì bản ghi tồn tại đúng bằng `OTP_TTL`, "còn bản ghi" ≡ "đang trong cooldown" → không cần state riêng.
-- **Cooldown theo `email` (chống Sybil):** tối đa 1 OTP/email/`OTP_TTL`, bất kể `platformUserID` (tra qua index `verifications.email`).
-- **Giới hạn brute-force (`OTP_MAX_ATTEMPTS`):** mỗi lần sai, tăng bộ đếm `attempts` (atomic `$inc`); khi đạt ngưỡng, đánh dấu OTP vô hiệu **nhưng giữ bản ghi** để TTL vẫn chặn resend tới hết `OTP_TTL` (tránh lỗ hổng request lại ngay để nhận thêm lượt đoán). Bản ghi tự xoá theo TTL.
-- Việc **enforce** các quy tắc trên thuộc use case `identity`; nền tảng (task #8) chỉ cung cấp config + schema (`verification.attempts`, index `email`) + primitive repo (`IncrementAttempts`, `FindByEmail`).
+- **Resend cooldown = `OTP_TTL` (15m mặc định):** use case `identity` chặn resend khi bản ghi `verification` của `platformUserID` thoả `expiry > now` (tức còn trong `OTP_TTL` kể từ lần gửi cuối). Cooldown **dựa trên `expiry`, không dựa trên việc bản ghi còn tồn tại** — Mongo xoá TTL bất đồng bộ (~mỗi 60s), nên một bản ghi hết hạn có thể tồn tại thêm một chút sau `expiry`; TTL index chỉ là dọn dẹp *eventual*, **không** phải cơ chế enforce.
+- **Cooldown theo `email` (chống Sybil):** index **unique** `verifications.email` ép *atomically* "tối đa 1 bản ghi OTP sống/email" — hai bind cùng email nhưng khác `platformUserID` chạy song song không thể cùng tạo bản ghi (DB reject ở mức index). Hệ quả: một OTP mới cho cùng email bị chặn tới khi bản ghi cũ được TTL dọn (≈ `OTP_TTL` + độ trễ dọn nhỏ).
+- **Giới hạn brute-force (`OTP_MAX_ATTEMPTS`):** mỗi lần sai, tăng bộ đếm `attempts` (atomic `$inc`); khi đạt ngưỡng, đánh dấu OTP vô hiệu **nhưng giữ bản ghi** để `expiry > now` vẫn chặn resend tới hết cooldown (tránh lỗ hổng request lại ngay để nhận thêm lượt đoán).
+- Việc **enforce** thuộc use case `identity`; nền tảng (task #8) cung cấp config + schema (`verification.attempts`, index **unique** `email`) + primitive repo (`IncrementAttempts`, `FindByEmail` — chỉ đọc, không phải cơ chế enforce).
 
 ## 5. Nhóm Sync
 

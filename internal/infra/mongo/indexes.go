@@ -51,7 +51,10 @@ func indexSpecs() map[collectionKey][]indexSpec {
 		},
 		colVerifications: {
 			{Name: "ttl_expiry", Keys: bson.D{{Key: "expiry", Value: 1}}, TTLSeconds: &ttlZero},
-			{Name: "idx_email", Keys: bson.D{{Key: "email", Value: 1}}},
+			// Unique email: atomically enforces "at most one live OTP per email"
+			// (per-email resend cooldown / Sybil defense). Two concurrent binds for
+			// the same email but different platformUserID cannot both create a record.
+			{Name: "uniq_email", Keys: bson.D{{Key: "email", Value: 1}}, Unique: true},
 		},
 	}
 }

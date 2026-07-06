@@ -154,10 +154,10 @@ func TestEnsureIndexes_CreatesExpectedIndexes(t *testing.T) {
 	if v["unique"] == true {
 		t.Error("verifications.ttl_expiry: must NOT be unique")
 	}
-	if ve := verifs["idx_email"]; ve == nil {
-		t.Fatal("verifications: idx_email index missing")
-	} else if ve["unique"] == true {
-		t.Error("verifications.idx_email: must NOT be unique")
+	if ve := verifs["uniq_email"]; ve == nil {
+		t.Fatal("verifications: uniq_email index missing")
+	} else if ve["unique"] != true {
+		t.Error("verifications.uniq_email: MUST be unique")
 	}
 }
 
@@ -284,6 +284,13 @@ func TestVerificationRepo_RoundTripAndExpiryDate(t *testing.T) {
 	// Per-email cooldown lookup.
 	if list, err := repo.FindByEmail("a@hcmut.edu.vn"); err != nil || len(list) != 1 {
 		t.Errorf("FindByEmail: want 1 record, got %d (%v)", len(list), err)
+	}
+
+	// Per-email uniqueness: a second record with the same email but a different
+	// platformUserID is rejected atomically by the unique index (no TOCTOU race).
+	err = repo.Upsert(verification.Model{PlatformUserID: "u2", Email: "a@hcmut.edu.vn", OTP: "x", Expiry: expiry})
+	if !mongo.IsDuplicateKeyError(err) {
+		t.Errorf("duplicate email (different id): want duplicate-key error, got %v", err)
 	}
 
 	// IncrementAttempts on a missing record reports ErrNotFound.

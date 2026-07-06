@@ -181,10 +181,10 @@ Cơ chế: Mặc định khi bind thành công.
 
 OTP là kênh xác thực duy nhất qua email nên phải chống lạm dụng. Chính sách (chi tiết config ở `config-env.md` §4–4.1):
 
-- **Resend cooldown = `OTP_TTL` (mặc định 15m):** trong khi bản ghi `verification` của `platformUserID` chưa hết hạn, từ chối gửi lại OTP (tránh email bombing cùng user). Vì TTL = 15m và cooldown = 15m, "còn bản ghi" ≡ "đang trong cooldown".
-- **Cooldown theo email (chống Sybil):** tối đa 1 OTP/email/`OTP_TTL` bất kể `platformUserID`, để kẻ tấn công không spam một hộp thư từ nhiều tài khoản.
-- **Chống brute-force (`OTP_MAX_ATTEMPTS`, mặc định 5):** mỗi lần nhập sai tăng bộ đếm `attempts`; khi đạt ngưỡng, OTP bị **vô hiệu hoá nhưng bản ghi được giữ** tới hết `OTP_TTL` — buộc chờ hết cooldown mới nhận lại OTP (không cho request lại ngay để nhận thêm lượt đoán).
-- Cơ chế enforce thuộc use case `identity`; nền tảng (task #8) cung cấp config (`OTP_TTL`, `OTP_MAX_ATTEMPTS`), schema (`verification.attempts`) và index `verifications.email`.
+- **Resend cooldown = `OTP_TTL` (mặc định 15m):** chặn gửi lại OTP khi bản ghi `verification` của `platformUserID` thoả `expiry > now` (tránh email bombing cùng user). Cooldown kiểm tra bằng `expiry > now`, **không** bằng việc bản ghi còn tồn tại — vì Mongo xoá TTL bất đồng bộ, bản ghi hết hạn có thể tồn tại thêm một chút sau `expiry`; TTL index chỉ là dọn dẹp *eventual*.
+- **Cooldown theo email (chống Sybil):** index **unique** `verifications.email` ép *atomically* "tối đa 1 OTP sống/email" bất kể `platformUserID` — kẻ tấn công không spam một hộp thư từ nhiều tài khoản (hai bản ghi cùng email bị DB reject).
+- **Chống brute-force (`OTP_MAX_ATTEMPTS`, mặc định 5):** mỗi lần nhập sai tăng bộ đếm `attempts`; khi đạt ngưỡng, OTP bị **vô hiệu hoá nhưng bản ghi được giữ** tới khi `expiry` qua — buộc chờ hết cooldown mới nhận lại OTP (không cho request lại ngay để nhận thêm lượt đoán).
+- Cơ chế enforce thuộc use case `identity`; nền tảng (task #8) cung cấp config (`OTP_TTL`, `OTP_MAX_ATTEMPTS`), schema (`verification.attempts`) và index **unique** `verifications.email`.
 
 ## 6.2 Sau bind — Discord
 
