@@ -131,3 +131,20 @@ func TestSync_PerRowError_DoesNotAbortBatch(t *testing.T) {
 		t.Error("BAD should not be stored")
 	}
 }
+
+// ROSTER_CSV_URL is a SOPS secret (its access token is in the path). The sync
+// log must never write the full URL — only the host.
+func TestHostOf_RedactsSecretPath(t *testing.T) {
+	secret := "https://docs.google.com/spreadsheets/d/e/2PACX-TOKEN/pub?output=csv"
+	got := hostOf(secret)
+	if got != "docs.google.com" {
+		t.Errorf("hostOf: want docs.google.com, got %q", got)
+	}
+	if got == secret {
+		t.Error("hostOf leaked the full secret URL")
+	}
+	if hostOf("not a url") != "<invalid>" {
+		t.Error(`hostOf: malformed URL should return "<invalid>", not the raw input`)
+	}
+}
+

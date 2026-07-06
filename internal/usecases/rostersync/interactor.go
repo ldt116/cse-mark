@@ -1,6 +1,7 @@
 package rostersync
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -42,7 +43,7 @@ func (s *Service) Sync() error {
 		return nil
 	}
 
-	log.Info().Str("url", s.csvUrl).Msg("Syncing roster")
+	log.Info().Str("host", hostOf(s.csvUrl)).Msg("Syncing roster")
 	records, err := s.downloader.DownloadCSV(s.csvUrl)
 	if err != nil {
 		return err
@@ -90,3 +91,16 @@ func (s *Service) Run() {
 		time.Sleep(interval)
 	}
 }
+
+// hostOf returns the URL's host for logging. ROSTER_CSV_URL is a SOPS secret
+// whose access token lives in the path/query, so only the host is logged —
+// never the full URL. It returns "<invalid>" (not the raw URL) on a parse
+// failure so a malformed secret is never written to logs either.
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return "<invalid>"
+	}
+	return u.Host
+}
+
