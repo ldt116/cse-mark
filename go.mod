@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.2
 
 require (
-	github.com/gin-gonic/gin v1.10.1
+	github.com/gin-gonic/gin v1.12.0
 	github.com/google/wire v0.6.0
 	github.com/jedib0t/go-pretty/v6 v6.4.9
 	github.com/joho/godotenv v1.5.1
