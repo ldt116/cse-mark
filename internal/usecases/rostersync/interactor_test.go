@@ -2,7 +2,9 @@ package rostersync
 
 import (
 	"errors"
+	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,6 +147,26 @@ func TestHostOf_RedactsSecretPath(t *testing.T) {
 	}
 	if hostOf("not a url") != "<invalid>" {
 		t.Error(`hostOf: malformed URL should return "<invalid>", not the raw input`)
+	}
+}
+
+// A download error returned by net/http is a *url.Error whose string embeds the
+// full secret URL. Sync must redact it before returning so Run()'s error log
+// never writes the URL.
+func TestSync_DownloadError_RedactsSecretURL(t *testing.T) {
+	secret := "https://example.com/d/e/2PACX-TOKEN/pub?output=csv"
+	cause := errors.New("dial tcp: connection refused")
+	dlErr := &url.Error{Op: "Get", URL: secret, Err: cause}
+	dl := &fakeDownloader{err: dlErr}
+	repo := newFakeRepo()
+	s := NewService(dl, repo, cfg(secret))
+
+	err := s.Sync().Error()
+	if strings.Contains(err, secret) || strings.Contains(err, "2PACX-TOKEN") {
+		t.Errorf("Sync leaked secret URL in error: %q", err)
+	}
+	if !strings.Contains(err, "connection refused") {
+		t.Errorf("redaction dropped the cause; want it preserved, got %q", err)
 	}
 }
 

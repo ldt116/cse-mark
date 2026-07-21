@@ -1,6 +1,7 @@
 package rostersync
 
 import (
+	"errors"
 	"net/url"
 	"time"
 
@@ -46,7 +47,10 @@ func (s *Service) Sync() error {
 	log.Info().Str("host", hostOf(s.csvUrl)).Msg("Syncing roster")
 	records, err := s.downloader.DownloadCSV(s.csvUrl)
 	if err != nil {
-		return err
+		// net/http wraps transport errors as *url.Error, whose Error() embeds
+		// the full ROSTER_CSV_URL (including the secret token in the path).
+		// Redact it so Sync's caller never logs the secret.
+		return redactURLErr(err)
 	}
 
 	students := parseRoster(records)
@@ -102,5 +106,21 @@ func hostOf(rawURL string) string {
 		return "<invalid>"
 	}
 	return u.Host
+}
+
+// redactURLErr strips the secret URL from a download error before it can be
+// logged. net/http wraps transport failures as *url.Error whose string form is
+// `Get "<full URL>": <reason>` — that string would leak ROSTER_CSV_URL (token
+// included) into logs. We unwrap the underlying reason and drop the URL, so the
+// caller only sees the cause (e.g. "context deadline exceeded"), not the URL.
+func redactURLErr(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		if urlErr.Err != nil {
+			return urlErr.Err
+		}
+		return errors.New(urlErr.Op + ": <redacted url>")
+	}
+	return err
 }
 
