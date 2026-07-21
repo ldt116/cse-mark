@@ -14,6 +14,7 @@ import (
 	"thuanle/cse-mark/internal/usecases/coursequery"
 	"thuanle/cse-mark/internal/usecases/markimport"
 	"thuanle/cse-mark/internal/usecases/marksync"
+	"thuanle/cse-mark/internal/usecases/rostersync"
 )
 
 // Injectors from wire.go:
@@ -31,10 +32,13 @@ func InitializeApp() (*App, error) {
 	markRepository := mongo.NewMarkRepo(client, config)
 	service := markimport.NewService(downloaderRepository, repository, markRepository)
 	marksyncService := marksync.NewService(activeCourseService, downloaderRepository, service)
+	studentRepository := mongo.NewStudentRepo(client, config)
+	rostersyncService := rostersync.NewService(downloaderRepository, studentRepository, config)
 	app := &App{
-		Config:      config,
-		MongoClient: client,
-		SyncService: marksyncService,
+		Config:        config,
+		MongoClient:   client,
+		SyncService:   marksyncService,
+		RosterService: rostersyncService,
 	}
 	return app, nil
 }
@@ -48,5 +52,6 @@ type App struct {
 	MongoClient *mongo.Client
 
 	//usecases
-	SyncService *marksync.Service
+	SyncService   *marksync.Service
+	RosterService *rostersync.Service
 }

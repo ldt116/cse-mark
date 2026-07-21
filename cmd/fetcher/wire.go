@@ -11,6 +11,7 @@ import (
 	"thuanle/cse-mark/internal/usecases/coursequery"
 	"thuanle/cse-mark/internal/usecases/markimport"
 	"thuanle/cse-mark/internal/usecases/marksync"
+	"thuanle/cse-mark/internal/usecases/rostersync"
 )
 
 type App struct {
@@ -20,7 +21,8 @@ type App struct {
 	MongoClient *mongo.Client
 
 	//usecases
-	SyncService *marksync.Service
+	SyncService   *marksync.Service
+	RosterService *rostersync.Service
 }
 
 func InitializeApp() (*App, error) {
@@ -32,6 +34,7 @@ func InitializeApp() (*App, error) {
 		mongo.NewClient,
 		mongo.NewCourseRepo,
 		mongo.NewMarkRepo,
+		mongo.NewStudentRepo,
 		http.NewSimpleDownloader,
 
 		//domain repositories and rules
@@ -41,6 +44,7 @@ func InitializeApp() (*App, error) {
 		coursequery.NewActiveCourseService,
 		markimport.NewService,
 		marksync.NewService,
+		rostersync.NewService,
 
 		//app
 		wire.Struct(new(App), "*"),

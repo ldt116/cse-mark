@@ -23,6 +23,11 @@ func main() {
 		return
 	}
 
+	// Roster sync runs on its own cadence (ROSTER_SYNC_INTERVAL), independent of
+	// the 10-minute mark sync. A roster failure is logged inside Run() and never
+	// affects mark sync.
+	go app.RosterService.Run()
+
 	app.SyncService.Run()
 
 	defer app.MongoClient.Disconnect()
