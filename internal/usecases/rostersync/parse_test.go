@@ -23,7 +23,7 @@ func TestParseRoster_ValidRows(t *testing.T) {
 
 func TestParseRoster_SkipsHeaderAndInvalid(t *testing.T) {
 	in := [][]string{
-		{"MSSV", "Name", "Email"},                     // header — skipped (EqualFold)
+		{"\ufeffMSSV", "Name", "Email"},                     // header — skipped (EqualFold)
 		{"mssv", "name", "email"},                     // header lowercase — skipped
 		{"", "No ID", "x@hcmut.edu.vn"},               // empty MSSV — skipped
 		{"2013307", "Only Two Cols"},                  // < 3 fields — skipped
@@ -53,3 +53,20 @@ func TestParseRoster_Empty(t *testing.T) {
 		t.Errorf("want empty, got %+v", got)
 	}
 }
+
+// Excel CSV exports prepend a UTF-8 BOM to the first cell. Without stripping
+// it, the header row's first cell is "\ufeffMSSV" and the header is not skipped
+// (it would be upserted as a bogus student).
+func TestParseRoster_StripsUTF8BOMOnHeader(t *testing.T) {
+	got := parseRoster([][]string{
+		{"\ufeffMSSV", "Name", "Email"},          // BOM-prefixed header — skipped
+		{"\ufeff2013307", "BOM ID", "a@hcmut.edu.vn"}, // BOM-prefixed MSSV — stripped
+	})
+	want := []student.Model{
+		{MSSV: "2013307", Name: "BOM ID", Email: "a@hcmut.edu.vn"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("BOM handling: got %+v, want %+v", got, want)
+	}
+}
+

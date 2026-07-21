@@ -6,6 +6,11 @@ import (
 	"thuanle/cse-mark/internal/domain/student"
 )
 
+// utf8BOM is the byte-order mark Excel prepends to CSV exports; Go's
+// encoding/csv leaves it on the first cell, where strings.TrimSpace does not
+// remove it. Defined via escape so the source itself stays BOM-free.
+const utf8BOM = "\ufeff"
+
 // parseRoster converts raw CSV records into roster students.
 //
 // The roster CSV has exactly three columns in fixed order: MSSV, Name, Email
@@ -16,9 +21,10 @@ import (
 //   - rows whose MSSV field is empty,
 //   - a header row whose MSSV field is literally "MSSV" (case-insensitive).
 //
-// Leading/trailing whitespace is trimmed from every field. parseRoster never
-// returns an error: structural CSV failures surface earlier at download time;
-// skipped rows are counted by the caller for logging.
+// Leading/trailing whitespace is trimmed from every field, and a UTF-8 BOM (as
+// emitted by Excel CSV exports) is stripped so the header row is still skipped.
+// parseRoster never returns an error: structural CSV failures surface earlier at
+// download time; skipped rows are counted by the caller for logging.
 func parseRoster(records [][]string) []student.Model {
 	models := make([]student.Model, 0, len(records))
 	for _, row := range records {
@@ -26,6 +32,7 @@ func parseRoster(records [][]string) []student.Model {
 			continue
 		}
 		mssv := strings.TrimSpace(row[0])
+		mssv = strings.TrimPrefix(mssv, utf8BOM)
 		if mssv == "" || strings.EqualFold(mssv, "MSSV") {
 			continue
 		}
