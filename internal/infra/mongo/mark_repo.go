@@ -114,3 +114,33 @@ func (r *MarkRepo) RemoveCourseMarks(courseId string) error {
 	}
 	return nil
 }
+
+// ListStudentIds returns every _id (MSSV) in a course's mark collection, i.e.
+// the roster of students with marks for that course. It drives enrollment for
+// role-sync. A non-existent/empty collection returns an empty slice (no
+// students enrolled), not an error.
+func (r *MarkRepo) ListStudentIds(courseId string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
+	defer cancel()
+
+	cur, err := r.db.Collection(courseId).Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = cur.Close(ctx) }()
+
+	var ids []string
+	for cur.Next(ctx) {
+		var doc struct {
+			ID string `bson:"_id"`
+		}
+		if err := cur.Decode(&doc); err != nil {
+			return nil, err
+		}
+		ids = append(ids, doc.ID)
+	}
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
