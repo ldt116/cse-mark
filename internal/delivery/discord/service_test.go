@@ -71,6 +71,7 @@ func (s *stubCourseAdmin) Sync(_ context.Context, courseId, _ string) (int, erro
 }
 
 // newSvc builds a Service wired to a fake gateway + a stub course admin.
+// Student deps default to nil; tests that need them use newStudentSvc.
 func newSvc(adminIDs []string, ca courseAdminAPI) (*Service, *fakeGW) {
 	gw := &fakeGW{}
 	return &Service{
@@ -78,10 +79,9 @@ func newSvc(adminIDs []string, ca courseAdminAPI) (*Service, *fakeGW) {
 		gw:          gw,
 		admin:       &adminChecker{ids: adminIDs},
 		courseAdmin: ca,
+		// student-facing deps intentionally nil; handlers guard against them.
 	}, gw
-}
-
-// cmdInteraction builds an application-command interaction with string options.
+}// cmdInteraction builds an application-command interaction with string options.
 func cmdInteraction(userID, name string, opts ...*discordgo.ApplicationCommandInteractionDataOption) *discordgo.Interaction {
 	i := &discordgo.Interaction{
 		Type: discordgo.InteractionApplicationCommand,

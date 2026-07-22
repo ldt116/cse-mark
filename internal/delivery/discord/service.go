@@ -7,7 +7,12 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/rs/zerolog/log"
 	"thuanle/cse-mark/internal/configs"
+	"thuanle/cse-mark/internal/domain/binding"
+	"thuanle/cse-mark/internal/domain/course"
+	"thuanle/cse-mark/internal/domain/mark"
+	"thuanle/cse-mark/internal/domain/student"
 	"thuanle/cse-mark/internal/usecases/courseadmin"
+	"thuanle/cse-mark/internal/usecases/identity"
 )
 
 // courseAdminAPI is the subset of *courseadmin.Service the handlers call.
@@ -16,6 +21,13 @@ import (
 type courseAdminAPI interface {
 	Create(ctx context.Context, courseId, link, actor string) (courseadmin.ProvisionResult, error)
 	Sync(ctx context.Context, courseId, actor string) (int, error)
+}
+
+// identityAPI is the subset of *identity.Service the handlers call.
+type identityAPI interface {
+	BindStart(ctx context.Context, platform, platformUserID, email string) error
+	BindVerify(ctx context.Context, platform, platformUserID, otp string) (identity.BindResult, error)
+	GetBinding(platform, platformUserID string) (binding.Model, error)
 }
 
 // Service is the Discord delivery layer. It owns the discordgo session's
@@ -29,8 +41,12 @@ type Service struct {
 	admin *adminChecker
 
 	courseAdmin courseAdminAPI
+	identity    identityAPI
 
-	// student-facing use cases are wired in M5; nil until then.
+	// read-only repos for /profile and /mark.
+	markRepo    mark.Repository
+	studentRepo student.Repository
+	courseRepo  course.Repository
 }
 
 // NewService wires the delivery service. The discordgo session is owned by the
@@ -42,6 +58,10 @@ func NewService(
 	cfg *configs.Config,
 	session *discordgo.Session,
 	courseAdmin *courseadmin.Service,
+	ident *identity.Service,
+	markRepo mark.Repository,
+	studentRepo student.Repository,
+	courseRepo course.Repository,
 ) (*Service, error) {
 	s := &Service{
 		cfg:         cfg,
@@ -49,6 +69,10 @@ func NewService(
 		session:     session,
 		admin:       &adminChecker{ids: cfg.DiscordAdminIds},
 		courseAdmin: courseAdmin,
+		identity:    ident,
+		markRepo:    markRepo,
+		studentRepo: studentRepo,
+		courseRepo:  courseRepo,
 	}
 
 	if session != nil {
@@ -104,9 +128,12 @@ func (s *Service) routeCommand(sess *discordgo.Session, i *discordgo.Interaction
 		s.handleCreate(i)
 	case cmdSync:
 		s.handleSync(i)
-	case cmdBind, cmdMark, cmdProfile:
-		// Wired in M5; respond with a placeholder so the command surface is coherent.
-		_ = s.gw.InteractionRespond(i, ephemeralMsg("Tính năng này sẽ khả dụng sớm."))
+	case cmdBind:
+		s.handleBind(i)
+	case cmdMark:
+		s.handleMark(i)
+	case cmdProfile:
+		s.handleProfile(i)
 	default:
 		_ = s.gw.InteractionRespond(i, ephemeralMsg("Lệnh không xác định."))
 	}
@@ -114,11 +141,11 @@ func (s *Service) routeCommand(sess *discordgo.Session, i *discordgo.Interaction
 }
 
 // not yet implemented stubs for component/modal routing (M5).
-func (s *Service) routeComponent(_ *discordgo.Session, i *discordgo.Interaction) {
-	_ = s.gw.InteractionRespond(i, ephemeralMsg("Tương tác chưa được kết nối."))
+func (s *Service) routeComponent(sess *discordgo.Session, i *discordgo.Interaction) {
+	s.routeComponentImpl(sess, i)
 }
-func (s *Service) routeModal(_ *discordgo.Session, i *discordgo.Interaction) {
-	_ = s.gw.InteractionRespond(i, ephemeralMsg("Tương tác chưa được kết nối."))
+func (s *Service) routeModal(sess *discordgo.Session, i *discordgo.Interaction) {
+	s.routeModalImpl(sess, i)
 }
 
 // --- admin gating ---
