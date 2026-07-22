@@ -16,25 +16,34 @@ type Service struct {
 
 var commands = []telebot.Command{
 	{
-		Text:        "mark",
-		Description: "/mark <course> <student_id> - Get mark of course",
+		Text:        "bind",
+		Description: "/bind - Liên kết tài khoản với MSSV (email OTP)",
 	},
 	{
-		Text:        "load",
-		Description: "/load <course> <link> - For teacher, load course marks from link",
+		Text:        "mark",
+		Description: "/mark <course> - Xem điểm môn (cần /bind trước)",
+	},
+	{
+		Text:        "create",
+		Description: "/create <course> <link> - Admin: nhập bảng điểm",
 	},
 	{
 		Text:        "clear",
-		Description: "/clear - Clear query history. For teacher, clear course link",
+		Description: "/clear <course> - Admin: xoá lớp + điểm",
 	},
 	{
 		Text:        "my",
-		Description: "/my - Your profile",
+		Description: "/my - Admin: danh sách lớp",
+	},
+	{
+		Text:        "cancel",
+		Description: "/cancel - Huỷ liên kết đang dở",
 	},
 }
 
 func NewService(config *configs.Config,
 	guestHandler *handlers.Guest, teacherHandler *handlers.Teacher, adminHandler *handlers.Admin,
+	bindHandler *handlers.Bind,
 	teacherOnlyMiddleware *middlewares.TeacherOnly) (*Service, error) {
 	pref := telebot.Settings{
 		Token:  config.TeleToken,
@@ -53,13 +62,30 @@ func NewService(config *configs.Config,
 	}
 
 	b.Use(middlewares.SendErrorMiddleware)
+
 	b.Handle("/start", guestHandler.Start)
+
+	// /bind + conversation: OnText first goes through the bind flow; if a bind is
+	// in progress the text is consumed, otherwise it falls through to the mark
+	// path (legacy free-text /mark courseId studentId, kept for compatibility).
+	b.Handle("/bind", bindHandler.Start)
+	b.Handle("/cancel", bindHandler.Cancel)
 	b.Handle("/mark", guestHandler.GetMark)
-	b.Handle(telebot.OnText, guestHandler.GetMark)
+	b.Handle(telebot.OnText, func(c telebot.Context) error {
+		if handled, err := bindHandler.OnText(c); err != nil {
+			return err
+		} else if handled {
+			return nil
+		}
+		return guestHandler.GetMark(c)
+	})
 
 	teacherOnly := b.Group()
 	teacherOnly.Use(teacherOnlyMiddleware.Handle)
 	teacherOnly.Handle("/my", teacherHandler.GetMyProfile)
+	// /create is the renamed /load (SRS §12.1); keep /load as an alias so existing
+	// admins are not broken during rollout.
+	teacherOnly.Handle("/create", teacherHandler.LoadCourseLink)
 	teacherOnly.Handle("/load", teacherHandler.LoadCourseLink)
 	teacherOnly.Handle("/clear", teacherHandler.ClearCourseLink)
 
