@@ -46,7 +46,7 @@ func InitializeApp() (*App, error) {
 		markimport.NewService,
 		iam.NewAuthzService,
 		identity.NewService,
-		ProvideLogSender, // email.Sender (log-only until SMTP configured)
+		ProvideSender, // email.Sender: SMTP if configured else fail-closed (OTP_SENDER=log for dev)
 
 		//delivery-view
 		views.NewTeacherRenderer,

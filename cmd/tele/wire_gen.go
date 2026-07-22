@@ -39,7 +39,7 @@ func InitializeApp() (*App, error) {
 	studentRepo := mongo.NewStudentRepo(client, config)
 	bindingRepo := mongo.NewBindingRepo(client, config)
 	verificationRepo := mongo.NewVerificationRepo(client, config)
-	sender := ProvideLogSender()
+	sender := ProvideSender(config)
 	ident := identity.NewService(studentRepo, verificationRepo, bindingRepo, sender, config)
 	guest := ProvideGuestHandler(rules, repository, ident)
 	courseRepository := mongo.NewCourseRepo(client, config)
