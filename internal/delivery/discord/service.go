@@ -174,6 +174,12 @@ func (s *Service) denyIfNotAdmin(i *discordgo.Interaction) bool {
 // --- handlers ---
 
 // handleCreate implements /create <course-id> <csv-url> for admins.
+//
+// Importing/provisioning (download CSV → import → EnsureRole/Channel) is
+// network-bound and can exceed Discord's 3-second initial-response deadline, so
+// we ACK with a deferred ("thinking") response immediately, then edit it with
+// the result. If the initial ACK itself fails we cannot recover the
+// interaction, so we log and bail.
 func (s *Service) handleCreate(i *discordgo.Interaction) {
 	if s.denyIfNotAdmin(i) {
 		return
@@ -182,18 +188,23 @@ func (s *Service) handleCreate(i *discordgo.Interaction) {
 	link := strOption(i, optCsvURL)
 	actor := caller(i)
 
-	// Defer to the use case; respond with the result or error.
+	if err := s.gw.InteractionRespond(i, deferredMsg("Đang tạo lớp...")); err != nil {
+		log.Warn().Err(err).Msg("create: deferred ACK failed")
+		return
+	}
+
 	res, err := s.courseAdmin.Create(context.Background(), courseId, link, actor)
 	if err != nil {
-		_ = s.gw.InteractionRespond(i, publicMsg(fmt.Sprintf("❌ /create thất bại: %v", err)))
+		_ = editInteraction(s.gw, i, fmt.Sprintf("❌ /create thất bại: %v", err))
 		return
 	}
 	msg := fmt.Sprintf("✅ Lớp **%s** đã sẵn sàng.\n• Nhập %d dòng điểm.\n• Role `<%s>`, channel `#%s`.",
 		res.CourseId, res.Imported, res.RoleID, res.ChannelID)
-	_ = s.gw.InteractionRespond(i, publicMsg(msg))
+	_ = editInteraction(s.gw, i, msg)
 }
 
-// handleSync implements /sync <course-id> for admins.
+// handleSync implements /sync <course-id> for admins. Same defer-then-edit
+// pattern as /create because reloading marks can exceed the 3s deadline.
 func (s *Service) handleSync(i *discordgo.Interaction) {
 	if s.denyIfNotAdmin(i) {
 		return
@@ -201,10 +212,15 @@ func (s *Service) handleSync(i *discordgo.Interaction) {
 	courseId := strOption(i, optCourse)
 	actor := caller(i)
 
-	n, err := s.courseAdmin.Sync(context.Background(), courseId, actor)
-	if err != nil {
-		_ = s.gw.InteractionRespond(i, publicMsg(fmt.Sprintf("❌ /sync thất bại: %v", err)))
+	if err := s.gw.InteractionRespond(i, deferredMsg("Đang đồng bộ...")); err != nil {
+		log.Warn().Err(err).Msg("sync: deferred ACK failed")
 		return
 	}
-	_ = s.gw.InteractionRespond(i, publicMsg(fmt.Sprintf("✅ Đã đồng bộ lại **%s** (%d dòng điểm). Role sẽ được cập nhật ở chu kỳ kế tiếp.", courseId, n)))
+
+	n, err := s.courseAdmin.Sync(context.Background(), courseId, actor)
+	if err != nil {
+		_ = editInteraction(s.gw, i, fmt.Sprintf("❌ /sync thất bại: %v", err))
+		return
+	}
+	_ = editInteraction(s.gw, i, fmt.Sprintf("✅ Đã đồng bộ lại **%s** (%d dòng điểm). Role sẽ được cập nhật ở chu kỳ kế tiếp.", courseId, n))
 }

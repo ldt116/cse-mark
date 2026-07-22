@@ -10,10 +10,12 @@ import (
 	"thuanle/cse-mark/internal/usecases/courseadmin"
 )
 
-// fakeGW records ApplicationCommandCreate and InteractionRespond calls.
+// fakeGW records ApplicationCommandCreate, InteractionRespond, and
+// InteractionResponseEdit calls.
 type fakeGW struct {
 	created  []*discordgo.ApplicationCommand
 	responds []responded
+	edits    []edited
 }
 
 type responded struct {
@@ -21,11 +23,21 @@ type responded struct {
 	resp        *discordgo.InteractionResponse
 }
 
+type edited struct {
+	interaction *discordgo.Interaction
+	content     string
+}
+
 func (f *fakeGW) InteractionRespond(i *discordgo.Interaction, resp *discordgo.InteractionResponse, _ ...discordgo.RequestOption) error {
 	f.responds = append(f.responds, responded{i, resp})
 	return nil
 }
-func (f *fakeGW) InteractionResponseEdit(*discordgo.Interaction, *discordgo.WebhookEdit, ...discordgo.RequestOption) (*discordgo.Message, error) {
+func (f *fakeGW) InteractionResponseEdit(i *discordgo.Interaction, newresp *discordgo.WebhookEdit, _ ...discordgo.RequestOption) (*discordgo.Message, error) {
+	c := ""
+	if newresp != nil && newresp.Content != nil {
+		c = *newresp.Content
+	}
+	f.edits = append(f.edits, edited{i, c})
 	return nil, nil
 }
 func (f *fakeGW) ApplicationCommandCreate(_ string, _ string, cmd *discordgo.ApplicationCommand, _ ...discordgo.RequestOption) (*discordgo.ApplicationCommand, error) {
@@ -141,16 +153,20 @@ func TestCreate_AdminSuccess(t *testing.T) {
 	if ca.lastCourse != "CO2003-L01" || ca.lastLink != "https://x/m.csv" {
 		t.Errorf("args forwarded wrong: course=%q link=%q", ca.lastCourse, ca.lastLink)
 	}
+	// First call is the deferred ACK (within Discord's 3s deadline), the result
+	// comes back via an edit of the original response.
 	if len(gw.responds) != 1 {
-		t.Fatalf("want 1 respond, got %d", len(gw.responds))
+		t.Fatalf("want 1 deferred ACK, got %d", len(gw.responds))
 	}
-	content := gw.responds[0].resp.Data.Content
+	if gw.responds[0].resp.Type != discordgo.InteractionResponseDeferredChannelMessageWithSource {
+		t.Errorf("want deferred ACK, got type %v", gw.responds[0].resp.Type)
+	}
+	if len(gw.edits) != 1 {
+		t.Fatalf("want 1 edit with the result, got %d", len(gw.edits))
+	}
+	content := gw.edits[0].content
 	if !strings.Contains(content, "42") || !strings.Contains(content, "CO2003-L01") {
-		t.Errorf("success message missing details: %q", content)
-	}
-	// success is a public message (not ephemeral)
-	if gw.responds[0].resp.Data.Flags&discordgo.MessageFlagsEphemeral != 0 {
-		t.Error("create success should be public")
+		t.Errorf("success edit missing details: %q", content)
 	}
 }
 
@@ -161,11 +177,14 @@ func TestCreate_ErrorShown(t *testing.T) {
 
 	s.handleCreate(i)
 
-	if len(gw.responds) != 1 {
-		t.Fatal("want 1 respond")
+	if len(gw.responds) != 1 || gw.responds[0].resp.Type != discordgo.InteractionResponseDeferredChannelMessageWithSource {
+		t.Fatal("want 1 deferred ACK first")
 	}
-	if !strings.Contains(gw.responds[0].resp.Data.Content, "boom") {
-		t.Errorf("error not surfaced: %q", gw.responds[0].resp.Data.Content)
+	if len(gw.edits) != 1 {
+		t.Fatal("want 1 edit surfacing the error")
+	}
+	if !strings.Contains(gw.edits[0].content, "boom") {
+		t.Errorf("error not surfaced in edit: %q", gw.edits[0].content)
 	}
 }
 
@@ -179,8 +198,14 @@ func TestSync_AdminSuccess(t *testing.T) {
 	if !ca.syncCalled || ca.lastCourse != "CO2003-L01" {
 		t.Errorf("sync not forwarded: called=%v course=%q", ca.syncCalled, ca.lastCourse)
 	}
-	if !strings.Contains(gw.responds[0].resp.Data.Content, "7") {
-		t.Errorf("sync count not shown: %q", gw.responds[0].resp.Data.Content)
+	if len(gw.responds) != 1 || gw.responds[0].resp.Type != discordgo.InteractionResponseDeferredChannelMessageWithSource {
+		t.Fatal("want 1 deferred ACK first")
+	}
+	if len(gw.edits) != 1 {
+		t.Fatal("want 1 edit with the result")
+	}
+	if !strings.Contains(gw.edits[0].content, "7") {
+		t.Errorf("sync count not shown in edit: %q", gw.edits[0].content)
 	}
 }
 

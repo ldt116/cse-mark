@@ -37,5 +37,23 @@ func publicMsg(content string) *discordgo.InteractionResponse {
 	}
 }
 
+// deferredMsg builds a DEFERRED response ("Bot is thinking..."). Discord allows
+// up to 15 minutes to follow up after a deferred ACK, so long-running admin
+// commands (import/provision) ACK within the 3s deadline and then edit the
+// original response with their result.
+func deferredMsg(content string) *discordgo.InteractionResponse {
+	return &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Content: content},
+	}
+}
+
+// editInteraction updates the original deferred response with the given text. It
+// is the follow-up half of the defer-then-edit pattern used by /create and /sync.
+func editInteraction(gw interactionGateway, i *discordgo.Interaction, content string) error {
+	_, err := gw.InteractionResponseEdit(i, &discordgo.WebhookEdit{Content: &content})
+	return err
+}
+
 // withCtx is a no-op helper kept for symmetry with future context-aware calls.
 func withCtx(_ context.Context) {}
