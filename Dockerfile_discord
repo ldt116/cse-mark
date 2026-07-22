@@ -1,0 +1,18 @@
+# BUILD
+FROM golang:1.26-alpine AS build
+
+WORKDIR /app
+
+COPY . .
+
+RUN go mod tidy
+
+WORKDIR /app/cmd/discord
+RUN go build -o discordbot
+
+# RUN IMAGE
+FROM alpine
+WORKDIR /app
+COPY --from=build /app/cmd/discord/discordbot .
+
+CMD ["./discordbot"]

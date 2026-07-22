@@ -32,3 +32,13 @@ services:
       - TZ=Asia/Ho_Chi_Minh
     restart: always
     network_mode: host
+  discord:
+    build:
+      context: .
+      dockerfile: Dockerfile_discord
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+    restart: always
+    network_mode: host
