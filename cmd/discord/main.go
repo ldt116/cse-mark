@@ -45,7 +45,7 @@ func main() {
 
 	// Infra: HTTP downloader, email sender (OTP), Discord bot/session.
 	downloader := http.NewSimpleDownloader(cfg)
-	sender := emailinfra.NewLogSender() // TODO: wire SMTP sender when SMTP_* configured
+	sender := emailinfra.NewSenderFromConfig(cfg) // SMTP if configured, fail-closed otherwise; OTP_SENDER=log for dev
 	holder, err := infraDiscord.NewSessionHolder(cfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("discord session failed")
