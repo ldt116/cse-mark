@@ -61,6 +61,13 @@ func (f *fakeMappingRepo) Find(courseId string) (discordmapping.Model, error) {
 	return discordmapping.Model{}, discordmapping.ErrNotFound
 }
 func (f *fakeMappingRepo) Remove(string) error { return nil }
+func (f *fakeMappingRepo) ListAll() ([]discordmapping.Model, error) {
+	out := make([]discordmapping.Model, 0, len(f.saved))
+	for _, m := range f.saved {
+		out = append(out, m)
+	}
+	return out, nil
+}
 
 type fakeImporter struct {
 	imported  int

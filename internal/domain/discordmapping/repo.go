@@ -15,4 +15,9 @@ type Repository interface {
 
 	// Remove deletes the mapping for a course.
 	Remove(courseId string) error
+
+	// ListAll returns every provisioned mapping. The role-sync scheduler iterates
+	// this to reconcile enrollment→role for each course that exists on Discord
+	// (SRS §10.3: only courses with a discord_mappings record are synced).
+	ListAll() ([]Model, error)
 }

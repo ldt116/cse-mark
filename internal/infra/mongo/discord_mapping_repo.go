@@ -55,3 +55,20 @@ func (r *DiscordMappingRepo) Remove(courseId string) error {
 	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": courseId})
 	return err
 }
+
+// ListAll returns every mapping. Used by the role-sync scheduler.
+func (r *DiscordMappingRepo) ListAll() ([]discordmapping.Model, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
+	defer cancel()
+	cur, err := r.collection.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	var out []discordmapping.Model
+	ctx2, cancel2 := context.WithTimeout(context.Background(), r.timeout)
+	defer cancel2()
+	if err := cur.All(ctx2, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
