@@ -86,6 +86,8 @@ CMD ["./discordbot"]
 
 Cấu hình SMTP sender (host/port/user/pass/from). HCMUT email là Google Workspace nên gửi tới được qua SMTP thường; cần sender có uy tín để không vào spam. Test gửi OTP tới `@hcmut.edu.vn`.
 
+**Sender selection** (`email.NewSenderFromConfig`): có `SMTP_HOST`+`SMTP_FROM` → `SmtpSender`; không → `/bind` **fail-closed** (`ErrDeliveryNotConfigured`); `OTP_SENDER=log` → `LogSender` (chỉ dev, log mã thay vì gửi). Cả `cmd/discord` và `cmd/tele` đều dùng selector này — không còn hardcode `LogSender`.
+
 ## 7. Runner Gitea Actions
 
 Giữ `amd64`, `arm64`, `linux`. Không thay đổi.
@@ -120,7 +122,7 @@ Code-side đã hoàn tất (stack PR M1–M8); phần còn lại là ops/secret/
 **Canary (lần đầu)**
 - [ ] `docker compose build && up -d`; `curl http://localhost:8080/healthz` OK.
 - [ ] Service `discord` online (log "Discord bot ready", slash command hiện trong guild).
-- [ ] 1 SV `/bind` trên Discord → nhận OTP (LogSender nếu chưa cấu hình SMTP; SmtpSender khi SMTP sẵn sàng) → `/profile` đúng MSSV/lớp.
+- [ ] 1 SV `/bind` trên Discord → nhận OTP qua **SmtpSender** (cần SMTP đã cấu hình). Nếu chưa cấu hình SMTP, `/bind` **fail-closed** (`ErrDeliveryNotConfigured`) chứ không log-giả; đặt `OTP_SENDER=log` để dùng LogSender trong dev.
 - [ ] Admin `/create <courseId> <csvUrl>` → role + channel tạo theo tên, `discord_mappings` lưu đúng id.
 - [ ] Role-sync scheduler gán role cho SV enrolled (log "role-sync: course reconciled" added=N).
 - [ ] Telegram `/bind` + `/mark <courseId>` (bound) hoạt động; `/create` (= `/load` cũ) OK.
