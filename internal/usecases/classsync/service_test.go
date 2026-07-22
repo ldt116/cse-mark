@@ -53,6 +53,15 @@ func (f *fakeBindings) DiscordUserID(mssv string) (string, error) {
 	return "", nil
 }
 
+// erroringBindings simulates a Mongo outage: FindByMSSV fails for every MSSV.
+// Role-sync must treat this as a hard failure and SKIP the course (no
+// removals), not as "everyone unbound" which would strip all roles.
+type erroringBindings struct{}
+
+func (erroringBindings) DiscordUserID(string) (string, error) {
+	return "", errors.New("mongo timeout")
+}
+
 // recorderBot tracks AssignRole/RemoveRole calls and serves MembersWithRole.
 type recorderBot struct {
 	mu           sync.Mutex
@@ -207,6 +216,47 @@ func TestBindingResolver_OnlyVerifiedDiscord(t *testing.T) {
 	}
 }
 
+func TestReconcile_TransientBindingErrorSkipsCourseNoRemoval(t *testing.T) {
+	// A binding-store outage must NOT be treated as "everyone unbound".
+	// The course has an enrolled+bound student u1 holding role r1; a Mongo
+	// timeout during lookup must skip the course (no removal), not strip u1.
+	maps := &fakeMappings{all: []discordmapping.Model{{CourseId: "C1", DiscordRoleId: "r1"}}}
+	marks := &fakeMarks{students: map[string][]string{"C1": {"m1"}}}
+	bnd := erroringBindings{}
+	bot := &recorderBot{members: map[string][]string{"r1": {"u1"}}}
+
+	s := NewService(maps, marks, bnd, bot, 0)
+	s.ReconcileOnce(context.Background())
+
+	// u1 must NOT be removed: the course was skipped due to the propagated error.
+	for _, r := range bot.removed {
+		if r == "r1:u1" {
+			t.Fatalf("transient binding error must not strip existing roles; removed=%v", bot.removed)
+		}
+	}
+	for _, a := range bot.assigned {
+		if a == "r1:u1" {
+			t.Fatalf("transient binding error must not assign; assigned=%v", bot.assigned)
+		}
+	}
+}
+
+func TestBindingResolver_OnlyErrNotFoundIsUnbound(t *testing.T) {
+	// genuine not-found → unbound, no error
+	repo := &fakeBindingRepo{byMSSV: map[string][]binding.Model{}}
+	r := NewBindingResolver(repo)
+	if uid, err := r.DiscordUserID("ghost"); err != nil || uid != "" {
+		t.Fatalf("not-found should be unbound with nil error; got uid=%q err=%v", uid, err)
+	}
+
+	// transient error → propagated
+	errRepo := &fakeBindingRepo{err: errors.New("connection refused")}
+	r2 := NewBindingResolver(errRepo)
+	if _, err := r2.DiscordUserID("m1"); err == nil {
+		t.Fatal("transient binding error should propagate, not map to unbound")
+	}
+}
+
 func contains(slice []string, want string) bool {
 	for _, s := range slice {
 		if s == want {
@@ -219,12 +269,16 @@ func contains(slice []string, want string) bool {
 // fakeBindingRepo for the resolver test.
 type fakeBindingRepo struct {
 	byMSSV map[string][]binding.Model
+	err    error // forced error (simulates a Mongo outage); empty by default
 }
 
 func (f *fakeBindingRepo) Upsert(binding.Model) error                                  { return nil }
 func (f *fakeBindingRepo) FindByPlatformUser(string, string) (binding.Model, error)    { return binding.Model{}, binding.ErrNotFound }
 func (f *fakeBindingRepo) FindByPlatformMSSV(string, string) (binding.Model, error)    { return binding.Model{}, binding.ErrNotFound }
 func (f *fakeBindingRepo) FindByMSSV(mssv string) ([]binding.Model, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
 	if v, ok := f.byMSSV[mssv]; ok {
 		return v, nil
 	}
