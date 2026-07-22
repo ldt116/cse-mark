@@ -28,9 +28,10 @@ func (r *recordingSleeper) Sleep(d time.Duration) {
 type fakeAPI struct {
 	mu sync.Mutex
 
-	roles   []*discordgo.Role
-	chans   []*discordgo.Channel
-	members []*discordgo.Member
+	roles     []*discordgo.Role
+	chans     []*discordgo.Channel
+	members   []*discordgo.Member
+	lastCreate discordgo.GuildChannelCreateData // payload of the last GuildChannelCreateComplex call
 
 	// scripted errors per call index, per method. nil entry = success.
 	roleAddErrs    []error
@@ -90,6 +91,7 @@ func (f *fakeAPI) GuildChannelCreateComplex(_ string, data discordgo.GuildChanne
 	if err := nthErr(f.chanCreateErrs, n-1); err != nil {
 		return nil, err
 	}
+	f.lastCreate = data
 	c := &discordgo.Channel{ID: "chan-" + data.Name, Name: data.Name}
 	f.chans = append(f.chans, c)
 	return c, nil
@@ -173,6 +175,38 @@ func TestEnsureChannel_CreatesLockedToRole(t *testing.T) {
 	// @everyone deny + role allow present in the created overwrites
 	if api.calls["chanCreate"] != 1 {
 		t.Errorf("chanCreate calls: want 1, got %d", api.calls["chanCreate"])
+	}
+}
+
+// TestEnsureChannel_DeniesEveryoneUsingGuildID guards the regression where the
+// @everyone overwrite ID was the literal "@everyone" instead of the guild ID.
+// Discord keys role overwrites by role snowflake; the @everyone role shares the
+// guild's ID, so the deny must use a.guildID or it silently does not apply.
+func TestEnsureChannel_DeniesEveryoneUsingGuildID(t *testing.T) {
+	api := newFakeAPI()
+	a := newTestAdapter(api, &recordingSleeper{})
+	if _, err := a.EnsureChannel(context.Background(), "co2003-l01", "role-1"); err != nil {
+		t.Fatalf("EnsureChannel: %v", err)
+	}
+	ows := api.lastCreate.PermissionOverwrites
+	if len(ows) != 2 {
+		t.Fatalf("want 2 overwrites, got %d", len(ows))
+	}
+	// First overwrite denies ViewChannel to @everyone via the GUILD id.
+	deny := ows[0]
+	if deny.ID != a.guildID {
+		t.Errorf("everyone-deny overwrite ID: want guildID %q, got %q (literal @everyone does not apply)", a.guildID, deny.ID)
+	}
+	if deny.Deny&discordgo.PermissionViewChannel == 0 {
+		t.Error("everyone overwrite should deny ViewChannel")
+	}
+	if deny.ID == "@everyone" {
+		t.Error("regression: overwrite ID is literal @everyone; must be guild ID")
+	}
+	// Second overwrite grants the class role.
+	allow := ows[1]
+	if allow.ID != "role-1" || allow.Allow&discordgo.PermissionViewChannel == 0 {
+		t.Errorf("role overwrite wrong: %+v", allow)
 	}
 }
 

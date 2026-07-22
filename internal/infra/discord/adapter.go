@@ -150,7 +150,7 @@ func (a *Adapter) EnsureChannel(ctx context.Context, name string, roleID string)
 				return nil
 			}
 		}
-		created, err := a.api.GuildChannelCreateComplex(a.guildID, permissionLockedChannel(name, roleID))
+		created, err := a.api.GuildChannelCreateComplex(a.guildID, permissionLockedChannel(name, a.guildID, roleID))
 		if err != nil {
 			return err
 		}
@@ -209,20 +209,22 @@ func (a *Adapter) MembersWithRole(ctx context.Context, roleID string) ([]string,
 // only to its role and admins. @everyone is denied ViewChannel; the role is
 // granted View/Send/Read. Overwrites keep the channel private regardless of
 // guild-wide @everyone settings (SRS §11.2).
-func permissionLockedChannel(name, roleID string) discordgo.GuildChannelCreateData {
-	denyEveryone := discordgo.GuildChannelCreateData{
+//
+// The @everyone role overwrite's ID must be the GUILD ID, not the literal
+// "@everyone": Discord identifies a role overwrite by role snowflake, and the
+// @everyone role always shares its guild's ID. A literal string is not a valid
+// snowflake and the deny would not apply (the channel could stay visible to
+// everyone). Callers pass guildID for this reason.
+func permissionLockedChannel(name, guildID, roleID string) discordgo.GuildChannelCreateData {
+	return discordgo.GuildChannelCreateData{
 		Name: name,
 		Type: discordgo.ChannelTypeGuildText,
 		PermissionOverwrites: []*discordgo.PermissionOverwrite{
-			{ID: aEveryoneRoleID, Type: discordgo.PermissionOverwriteTypeRole, Deny: discordgo.PermissionViewChannel},
+			{ID: guildID, Type: discordgo.PermissionOverwriteTypeRole, Deny: discordgo.PermissionViewChannel},
 			{ID: roleID, Type: discordgo.PermissionOverwriteTypeRole, Allow: discordgo.PermissionViewChannel | discordgo.PermissionSendMessages | discordgo.PermissionReadMessageHistory},
 		},
 	}
-	return denyEveryone
 }
-
-// aEveryoneRoleID is the fixed id of the @everyone role in every guild.
-const aEveryoneRoleID = "@everyone"
 
 // rateLimiter is the part of discordgo.RateLimitError we read.
 type rateLimiter interface {
