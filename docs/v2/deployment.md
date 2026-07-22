@@ -17,9 +17,11 @@
 
 ### 2.1 `Dockerfile_discord` (theo pattern `Dockerfile_tele`)
 
+Đã thêm vào repo — `Dockerfile_discord`:
+
 ```dockerfile
 # BUILD
-FROM golang:1.24-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /app
 COPY . .
 RUN go mod tidy
@@ -32,7 +34,11 @@ COPY --from=build /app/cmd/discord/discordbot .
 CMD ["./discordbot"]
 ```
 
+(Base image `golang:1.26-alpine` khớp toolchain `go1.26.5` trong `go.mod`; `Dockerfile_tele`/`_fetcher`/`_api` cũng đã ở 1.26.)
+
 ### 2.2 Mục trong `docker-compose.yml`
+
+Đã thêm vào repo:
 
 ```yaml
   discord:
@@ -49,9 +55,9 @@ CMD ["./discordbot"]
 
 `fetcher` và `tele` giữ nguyên (chỉ code nội tại thay đổi). `api` giữ nguyên.
 
-## 3. CI — thêm image thứ 4
+## 3. CI — thêm image thứ 4 (đã làm)
 
-`.gitea/workflows/build-docker.yml` hiện build `api/fetcher/tele` qua matrix `service`. **Thêm `discord`** vào danh sách service:
+`.gitea/workflows/build-docker.yml` build `api/fetcher/tele/discord` qua matrix `service` (cả job `build` lẫn `manifest`):
 
 ```yaml
         service:
@@ -100,3 +106,27 @@ curl -fsS http://localhost:8080/healthz
 ```
 
 Discord bot online + Telegram bot đáp lệnh `/bind` → triển khai thành công.
+
+## 9. Rollout checklist (mục tiêu #13)
+
+Code-side đã hoàn tất (stack PR M1–M8); phần còn lại là ops/secret/deploy thực tế.
+
+**Trước khi lên môi trường**
+- [ ] `enc.env`/SOPS có đủ secret mới: `DISCORD_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_ADMIN_IDS`, `SMTP_HOST/PORT/USERNAME/PASSWORD/FROM`, `ROSTER_CSV_URL`.
+- [ ] Bot Discord đã invite vào guild với quyền **Manage Roles, Manage Channels, Send Messages**; **role của bot xếp cao hơn** class role (để gán/gỡ).
+- [ ] Roster CSV ở `ROSTER_CSV_URL` đúng 3 cột `MSSV,Name,Email`.
+- [ ] DB đã backup.
+
+**Canary (lần đầu)**
+- [ ] `docker compose build && up -d`; `curl http://localhost:8080/healthz` OK.
+- [ ] Service `discord` online (log "Discord bot ready", slash command hiện trong guild).
+- [ ] 1 SV `/bind` trên Discord → nhận OTP (LogSender nếu chưa cấu hình SMTP; SmtpSender khi SMTP sẵn sàng) → `/profile` đúng MSSV/lớp.
+- [ ] Admin `/create <courseId> <csvUrl>` → role + channel tạo theo tên, `discord_mappings` lưu đúng id.
+- [ ] Role-sync scheduler gán role cho SV enrolled (log "role-sync: course reconciled" added=N).
+- [ ] Telegram `/bind` + `/mark <courseId>` (bound) hoạt động; `/create` (= `/load` cũ) OK.
+
+**Cutover / vận hành**
+- [ ] Thông báo cho người dùng Telegram: `/mark` giờ cần `/bind` (giữ alias `/load` + fallback legacy `/mark <course> <studentId>` trong giai đoạn chuyển tiếp).
+- [ ] Theo dõi log 24h: SMTP deliverability, Discord rate-limit (429/backoff), scheduler mark/roster/role không lỗi.
+
+**Rollback** (xem `migration.md` §4): revert image `tele` về v1; stop service `discord`; collection/index mới để nguyên (an toàn).

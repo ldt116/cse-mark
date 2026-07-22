@@ -20,6 +20,7 @@ jobs:
           - api
           - fetcher
           - tele
+          - discord
     runs-on: ${{ matrix.arch }}
     steps:
       - name: Checkout
@@ -61,6 +62,7 @@ jobs:
           - api
           - fetcher
           - tele
+          - discord
     runs-on: linux
     needs: [build]
     steps:
