@@ -7,7 +7,7 @@ toolchain go1.26.5
 require (
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/gin-gonic/gin v1.12.0
-	github.com/google/wire v0.6.0
+	github.com/google/wire v0.7.0
 	github.com/jedib0t/go-pretty/v6 v6.4.9
 	github.com/joho/godotenv v1.5.1
 	github.com/rs/zerolog v1.34.0
