@@ -3,13 +3,13 @@ package mongo
 import (
 	"context"
 	"errors"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/domain/course"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type CourseRepo struct {
@@ -120,7 +120,7 @@ func (r *CourseRepo) UpdateCourseLink(courseId string, link string, userId int64
 
 	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
-	_, err := r.collection.UpdateByID(ctx, courseId, update, options.Update().SetUpsert(true))
+	_, err := r.collection.UpdateByID(ctx, courseId, update, options.UpdateOne().SetUpsert(true))
 	if err != nil {
 		return err
 	}

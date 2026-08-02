@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/domain/binding"
 )
@@ -40,7 +40,7 @@ func (r *BindingRepo) Upsert(m binding.Model) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
-	_, err := r.collection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	_, err := r.collection.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true))
 	return err
 }
 

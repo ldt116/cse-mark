@@ -4,7 +4,7 @@ import (
 	"crypto/subtle"
 	"strings"
 
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // constantTimeEq compares the expected and submitted OTP in constant time to

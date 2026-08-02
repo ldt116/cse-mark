@@ -3,8 +3,8 @@ package mongo
 import (
 	"context"
 	"github.com/rs/zerolog/log"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"thuanle/cse-mark/internal/configs"
 	"time"
 )
@@ -22,7 +22,7 @@ func NewClient(config *configs.Config) (*Client, error) {
 	defer cancel()
 
 	// Connect to MongoDB
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(connectionString))
+	client, err := mongo.Connect(options.Client().ApplyURI(connectionString))
 	if err != nil {
 		log.Fatal().Err(err).Msg("mongo connect failed")
 		return nil, err

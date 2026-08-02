@@ -7,10 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	mopts "go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	mopts "go.mongodb.org/mongo-driver/v2/mongo/options"
 	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/domain/binding"
 	"thuanle/cse-mark/internal/domain/discordmapping"
@@ -49,7 +48,7 @@ func setupMongo(t *testing.T) (*Client, *configs.Config) {
 	cfg := testConfig(t)
 
 	uri := "mongodb://" + cfg.MongoHost + ":" + cfg.MongoPort
-	mc, err := mongo.Connect(context.Background(), mopts.Client().ApplyURI(uri))
+	mc, err := mongo.Connect(mopts.Client().ApplyURI(uri))
 	if err != nil {
 		t.Fatalf("mongo connect: %v", err)
 	}
@@ -258,9 +257,9 @@ func TestVerificationRepo_RoundTripAndExpiryDate(t *testing.T) {
 	if err := db.Collection(cfg.DbSettingsVerifications).FindOne(ctx, bson.M{"_id": "u1"}).Decode(&doc); err != nil {
 		t.Fatalf("raw find: %v", err)
 	}
-	dt, ok := doc["expiry"].(primitive.DateTime)
+	dt, ok := doc["expiry"].(bson.DateTime)
 	if !ok {
-		t.Fatalf("stored expiry: want primitive.DateTime, got %T", doc["expiry"])
+		t.Fatalf("stored expiry: want bson.DateTime, got %T", doc["expiry"])
 	}
 	if !dt.Time().Equal(expiry) {
 		t.Errorf("stored expiry value: want %v, got %v", expiry, dt.Time())
