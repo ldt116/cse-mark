@@ -4,8 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func TestModel_BsonRoundTrip(t *testing.T) {
@@ -34,9 +33,9 @@ func TestModel_BsonRoundTrip(t *testing.T) {
 
 	// CRITICAL for the TTL index: expiry must serialize as a BSON Date,
 	// not an int64 timestamp. A non-Date type silently breaks TTL deletion.
-	dt, ok := doc["expiry"].(primitive.DateTime)
+	dt, ok := doc["expiry"].(bson.DateTime)
 	if !ok {
-		t.Fatalf("expiry: want primitive.DateTime (BSON Date), got %T", doc["expiry"])
+		t.Fatalf("expiry: want bson.DateTime (BSON Date), got %T", doc["expiry"])
 	}
 	if !dt.Time().Equal(expiry) {
 		t.Errorf("expiry value: want %v, got %v", expiry, dt.Time())
