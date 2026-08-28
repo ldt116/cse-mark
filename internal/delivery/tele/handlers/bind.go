@@ -25,7 +25,9 @@ const (
 
 const platformTelegram = "telegram"
 
-const dmOnlyBindMsg = "/bind chỉ dùng trong nhắn riêng (DM) với bot."
+// dmOnlyMsg is the shared DM-only notice for identity features (/bind, bound
+// /mark) — they never run in groups (issue #38).
+const dmOnlyMsg = "Lệnh này chỉ dùng trong nhắn riêng (DM) với bot."
 
 // isPrivate reports whether the update happened in a 1:1 chat with the bot.
 // Identity features (/bind, bound /mark) are DM-only: in a group, keying by
@@ -64,7 +66,7 @@ func NewBindHandler(identitySvc identityAPI) *Bind {
 // Start begins the bind flow. If already bound, it reports the existing MSSV.
 func (h *Bind) Start(c telebot.Context) error {
 	if !isPrivate(c) {
-		return helpers.Send(c, dmOnlyBindMsg)
+		return helpers.Send(c, dmOnlyMsg)
 	}
 	userID := c.Sender().ID
 	if b, err := h.identity.GetBinding(platformTelegram, platformUserID(userID)); err == nil && b.Verified {
@@ -115,7 +117,7 @@ func (h *Bind) OnText(c telebot.Context) (handled bool, err error) {
 // sends no `from` (Sender() is nil there) — so gate before using the sender.
 func (h *Bind) Cancel(c telebot.Context) error {
 	if !isPrivate(c) {
-		return helpers.Send(c, dmOnlyBindMsg)
+		return helpers.Send(c, dmOnlyMsg)
 	}
 	h.setStage(c.Sender().ID, stageIdle)
 	return helpers.Send(c, "Đã huỷ liên kết.")

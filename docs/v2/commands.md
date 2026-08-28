@@ -10,7 +10,7 @@ Quy ước: `<bắt buộc>` `[tùy chọn]`. Trả lời nhạy cảm (điểm)
 |---|---|---|
 | `/start` | Guest | Lời chào, hướng dẫn `/bind`. |
 | `/bind` | Guest | Bind email→MSSV (xem `flows.md` §1). Chỉ qua DM. |
-| `/mark` | Đã bind | Tổng điểm mọi lớp đang học của MSSV đã bind. Chỉ qua DM. |
+| `/mark` | Đã bind | Nhắc nhập mã lớp — trên tele phải dùng `/mark <mã lớp>`. Chỉ qua DM. |
 | `/mark <courseId>` | Đã bind | Điểm của một môn. Chỉ qua DM. |
 | `/create <courseId> <csvUrl>` | Admin | Tạo/cập nhật lớp + import marks (đổi tên từ `/load`). |
 | `/clear <courseId>` | Admin | Xoá lớp + marks. |
@@ -78,7 +78,7 @@ Lab 1   10
 |---|---|---|
 | Bind email→MSSV | `/bind` | `/bind` |
 | Xem thông tin | `/my` (admin) | `/profile` (student) |
-| Tra điểm | `/mark [courseId]` | `/mark [courseId]` |
+| Tra điểm | `/mark <courseId>` (DM) | `/mark [courseId]` (ephemeral) |
 | Tạo/cập lớp | `/create` | `/create` (+provision) |
 | Sync ngay | — | `/sync` |
 | Dọn dữ liệu lớp | `/clear` | — |

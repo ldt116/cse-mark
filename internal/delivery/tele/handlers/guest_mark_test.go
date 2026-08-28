@@ -32,6 +32,7 @@ func TestGetMark_GroupChatDirectedToDM(t *testing.T) {
 	mr := &fakeMarkRepo{mark: "HT: 9.0"}
 	g := NewGuestHandler(&course.Rules{}, mr, WithGuestIdentity(ident))
 	c := groupCtx(42)
+	c.text = "/mark CO2003" // routed here by the /mark command handler
 	c.args = []string{"CO2003"}
 
 	if err := g.GetMark(c); err != nil {
@@ -45,6 +46,27 @@ func TestGetMark_GroupChatDirectedToDM(t *testing.T) {
 	}
 	if len(c.sent) != 1 || !contains("nhắn riêng", c.sent[0]) {
 		t.Fatalf("want DM-only notice, got %v", c.sent)
+	}
+}
+
+// Review of #39: plain group chatter reaches GetMark via the OnText
+// fallthrough — it must stay silent or every group message bounces a
+// DM-only notice.
+func TestGetMark_GroupPlainTextSilent(t *testing.T) {
+	ident := &fakeIdentity{existing: binding.Model{MSSV: "2013307", Verified: true}}
+	mr := &fakeMarkRepo{mark: "HT: 9.0"}
+	g := NewGuestHandler(&course.Rules{}, mr, WithGuestIdentity(ident))
+	c := groupCtx(42)
+	c.text = "hello mọi người"
+
+	if err := g.GetMark(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.sent) != 0 {
+		t.Fatalf("group chatter must stay silent, sent %v", c.sent)
+	}
+	if ident.bindingKey != "" || mr.gotStudent != "" {
+		t.Fatal("group chatter must not resolve identity or query marks")
 	}
 }
 

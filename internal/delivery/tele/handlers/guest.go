@@ -65,7 +65,13 @@ func (h *Guest) GetMark(c telebot.Context) error {
 	// binding to everyone (issue #38).
 	if h.identity != nil {
 		if !isPrivate(c) {
-			return helpers.Send(c, "Lệnh này chỉ dùng trong nhắn riêng (DM) với bot. Hãy /bind rồi dùng /mark <mã lớp> qua DM.")
+			// Plain group chatter reaches GetMark via the OnText fallthrough —
+			// answer command attempts only, so chatter stays silent instead of
+			// bouncing a DM notice off every group message.
+			if !strings.HasPrefix(c.Text(), "/") {
+				return nil
+			}
+			return helpers.Send(c, dmOnlyMsg+" Hãy /bind rồi dùng /mark <mã lớp> qua DM.")
 		}
 		userID := c.Sender().ID
 		b, err := h.identity.GetBinding(platformTelegram, platformUserID(userID))
