@@ -110,8 +110,13 @@ func (h *Bind) OnText(c telebot.Context) (handled bool, err error) {
 	return false, nil
 }
 
-// Cancel aborts an in-flight bind.
+// Cancel aborts an in-flight bind. DM-only like the rest of the bind flow:
+// a group /cancel must not touch sender state, and an anonymous group admin
+// sends no `from` (Sender() is nil there) — so gate before using the sender.
 func (h *Bind) Cancel(c telebot.Context) error {
+	if !isPrivate(c) {
+		return helpers.Send(c, dmOnlyBindMsg)
+	}
 	h.setStage(c.Sender().ID, stageIdle)
 	return helpers.Send(c, "Đã huỷ liên kết.")
 }

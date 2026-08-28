@@ -114,6 +114,27 @@ func TestBindOnText_OtherUserStageNotVisible(t *testing.T) {
 	}
 }
 
+// Review of #39: /cancel from an anonymous group admin has no `from` field
+// (only sender_chat), so Sender() returns nil — Cancel must gate on chat type
+// before touching the sender or it panics and takes the whole bot down.
+func TestBindCancel_GroupChatRefusedWithoutSender(t *testing.T) {
+	ident := &fakeIdentity{}
+	h := NewBindHandler(ident)
+	h.setStage(42, stageAwaitEmail)
+	c := groupCtx(42)
+	c.sender = nil // anonymous group admin: no `from` in the update
+
+	if err := h.Cancel(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.sent) != 1 || !contains("nhắn riêng", c.sent[0]) {
+		t.Fatalf("want DM-only notice, got %v", c.sent)
+	}
+	if h.stage(42) != stageAwaitEmail {
+		t.Fatal("group /cancel must not touch any stage")
+	}
+}
+
 func TestBindCancel_PrivateChatWorks(t *testing.T) {
 	ident := &fakeIdentity{}
 	h := NewBindHandler(ident)
