@@ -19,18 +19,25 @@ type fakeIdentity struct {
 	startEmail string
 	verifyOTP  string
 	started    bool
+
+	startKey   string // platformUserID passed to BindStart
+	verifyKey  string // platformUserID passed to BindVerify
+	bindingKey string // platformUserID passed to GetBinding
 }
 
-func (f *fakeIdentity) BindStart(_ context.Context, _, _, email string) error {
+func (f *fakeIdentity) BindStart(_ context.Context, _, key, email string) error {
 	f.started = true
+	f.startKey = key
 	f.startEmail = email
 	return f.bindStartErr
 }
-func (f *fakeIdentity) BindVerify(_ context.Context, _, _, otp string) (identity.BindResult, error) {
+func (f *fakeIdentity) BindVerify(_ context.Context, _, key, otp string) (identity.BindResult, error) {
+	f.verifyKey = key
 	f.verifyOTP = otp
 	return f.bindVerifyRes, f.bindVerifyErr
 }
-func (f *fakeIdentity) GetBinding(string, string) (binding.Model, error) {
+func (f *fakeIdentity) GetBinding(_, key string) (binding.Model, error) {
+	f.bindingKey = key
 	return f.existing, f.existingErr
 }
 
