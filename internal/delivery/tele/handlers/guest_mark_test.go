@@ -1,0 +1,138 @@
+package handlers
+
+import (
+	"testing"
+	"time"
+
+	"thuanle/cse-mark/internal/domain/binding"
+	"thuanle/cse-mark/internal/domain/course"
+	"thuanle/cse-mark/internal/domain/mark"
+)
+
+type fakeCourseRepo struct {
+	courses []course.Model
+}
+
+func (f *fakeCourseRepo) FindCoursesUpdatedAfter(time.Time) ([]course.Model, error) {
+	return f.courses, nil
+}
+
+type fakeMarkRepo struct {
+	mark   string
+	getErr error
+
+	gotCourse  string
+	gotStudent string
+}
+
+func (f *fakeMarkRepo) GetMark(courseId, studentId string) (string, error) {
+	f.gotCourse, f.gotStudent = courseId, studentId
+	return f.mark, f.getErr
+}
+func (f *fakeMarkRepo) RemoveMarksByCourseId(string) error               { return nil }
+func (f *fakeMarkRepo) AddCourseMarks(string, []map[string]string) error { return nil }
+func (f *fakeMarkRepo) RemoveCourseMarks(string) error                   { return nil }
+func (f *fakeMarkRepo) ListStudentIds(string) ([]string, error)          { return nil, nil }
+
+// Issue #38: identity-resolved /mark must resolve by sender and be DM-only —
+// a group reply would expose the sender's MSSV binding to everyone.
+
+func TestGetMark_GroupChatDirectedToDM(t *testing.T) {
+	ident := &fakeIdentity{existing: binding.Model{MSSV: "2013307", Verified: true}}
+	mr := &fakeMarkRepo{mark: "HT: 9.0"}
+	g := NewGuestHandler(&course.Rules{}, mr, WithGuestIdentity(ident))
+	c := groupCtx(42)
+	c.text = "/mark CO2003" // routed here by the /mark command handler
+	c.args = []string{"CO2003"}
+
+	if err := g.GetMark(c); err != nil {
+		t.Fatal(err)
+	}
+	if ident.bindingKey != "" {
+		t.Fatalf("must not resolve identity in a group, resolved %q", ident.bindingKey)
+	}
+	if mr.gotStudent != "" {
+		t.Fatalf("must not query marks in a group, queried %q", mr.gotStudent)
+	}
+	if len(c.sent) != 1 || !contains("nhắn riêng", c.sent[0]) {
+		t.Fatalf("want DM-only notice, got %v", c.sent)
+	}
+}
+
+// Review of #39: plain group chatter reaches GetMark via the OnText
+// fallthrough — it must stay silent or every group message bounces a
+// DM-only notice.
+func TestGetMark_GroupPlainTextSilent(t *testing.T) {
+	ident := &fakeIdentity{existing: binding.Model{MSSV: "2013307", Verified: true}}
+	mr := &fakeMarkRepo{mark: "HT: 9.0"}
+	g := NewGuestHandler(&course.Rules{}, mr, WithGuestIdentity(ident))
+	c := groupCtx(42)
+	c.text = "hello mọi người"
+
+	if err := g.GetMark(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.sent) != 0 {
+		t.Fatalf("group chatter must stay silent, sent %v", c.sent)
+	}
+	if ident.bindingKey != "" || mr.gotStudent != "" {
+		t.Fatal("group chatter must not resolve identity or query marks")
+	}
+}
+
+// /mark with no args summarizes every enrolled course, mirroring Discord /mark.
+func TestGetMark_PrivateNoArgsShowsAllCourses(t *testing.T) {
+	ident := &fakeIdentity{existing: binding.Model{MSSV: "2013307", Verified: true}}
+	mr := &fakeMarkRepo{mark: "HT: 9.0"}
+	cr := &fakeCourseRepo{courses: []course.Model{{Id: "CO2003"}, {Id: "CO3007"}}}
+	g := NewGuestHandler(&course.Rules{}, mr, WithGuestIdentity(ident), WithGuestCourseLister(cr))
+	c := privateCtx(7, 42)
+
+	if err := g.GetMark(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.sent) != 1 {
+		t.Fatalf("want one summary reply, got %v", c.sent)
+	}
+	if !contains("CO2003", c.sent[0]) || !contains("CO3007", c.sent[0]) {
+		t.Fatalf("summary must list both courses, got %q", c.sent[0])
+	}
+}
+
+// A course the student has no mark in is skipped, not an error.
+func TestGetMark_PrivateNoArgsSkipsCoursesWithoutMarks(t *testing.T) {
+	ident := &fakeIdentity{existing: binding.Model{MSSV: "2013307", Verified: true}}
+	mr := &fakeMarkRepo{getErr: mark.ErrNotFound}
+	cr := &fakeCourseRepo{courses: []course.Model{{Id: "CO2003"}}}
+	g := NewGuestHandler(&course.Rules{}, mr, WithGuestIdentity(ident), WithGuestCourseLister(cr))
+	c := privateCtx(7, 42)
+
+	if err := g.GetMark(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.sent) != 1 || !contains("Chưa có điểm", c.sent[0]) {
+		t.Fatalf("want no-marks notice, got %v", c.sent)
+	}
+}
+
+func TestGetMark_PrivateResolvesBySender(t *testing.T) {
+	ident := &fakeIdentity{existing: binding.Model{MSSV: "2013307", Verified: true}}
+	mr := &fakeMarkRepo{mark: "HT: 9.0"}
+	g := NewGuestHandler(&course.Rules{}, mr, WithGuestIdentity(ident))
+	// chat id 7 ≠ sender id 42: proves the binding lookup uses the sender.
+	c := privateCtx(7, 42)
+	c.args = []string{"CO2003"}
+
+	if err := g.GetMark(c); err != nil {
+		t.Fatal(err)
+	}
+	if ident.bindingKey != "42" {
+		t.Fatalf("GetBinding key = %q, want sender 42", ident.bindingKey)
+	}
+	if mr.gotCourse != "CO2003" || mr.gotStudent != "2013307" {
+		t.Fatalf("GetMark(%q,%q), want (CO2003,2013307)", mr.gotCourse, mr.gotStudent)
+	}
+	if len(c.sent) != 1 || !contains("9.0", c.sent[0]) {
+		t.Fatalf("want marks reply, got %v", c.sent)
+	}
+}

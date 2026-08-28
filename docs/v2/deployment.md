@@ -118,6 +118,7 @@ Code-side đã hoàn tất (stack PR M1–M8); phần còn lại là ops/secret/
 - [ ] Bot Discord đã invite vào guild với quyền **Manage Roles, Manage Channels, Send Messages**; **role của bot xếp cao hơn** class role (để gán/gỡ).
 - [ ] Roster CSV ở `ROSTER_CSV_URL` đúng 3 cột `MSSV,Name,Email`.
 - [ ] DB đã backup.
+- [ ] Nếu từng chạy build v2 trước fix #38: xoá binding group chat (platform_user_id âm) — `db.bindings.deleteMany({platform: "telegram", platform_user_id: /^-/})`.
 
 **Canary (lần đầu)**
 - [ ] `docker compose build && up -d`; `curl http://localhost:8080/healthz` OK.

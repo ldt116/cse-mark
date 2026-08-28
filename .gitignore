@@ -30,3 +30,6 @@
 
 # Test binary, built with "go test -c"
 *.test
+
+# Superpowers scratch (plans, briefs, reports — never commit)
+.superpowers/

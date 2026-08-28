@@ -21,7 +21,7 @@ var commands = []telebot.Command{
 	},
 	{
 		Text:        "mark",
-		Description: "/mark <course> - Xem điểm môn (cần /bind trước)",
+		Description: "/mark [mã lớp] - Xem điểm mọi lớp hoặc một lớp (cần /bind trước)",
 	},
 	{
 		Text:        "create",
