@@ -19,7 +19,7 @@ Nguồn: Roster CSV. Email unique ngầm (mỗi email ↔ 1 MSSV).
 | Trường | Kiểu | bson | Ghi chú |
 |---|---|---|---|
 | Platform | string | `platform` | `telegram` \| `discord` |
-| PlatformUserID | string | `platform_user_id` | TG chat ID / Discord user ID (string) |
+| PlatformUserID | string | `platform_user_id` | TG user ID (sender; /bind và /mark identity chỉ qua DM — issue #38) / Discord user ID (string) |
 | MSSV | string | `mssv` | |
 | Verified | bool | `verified` | |
 | BoundAt | int64 | `bound_at` | unix |

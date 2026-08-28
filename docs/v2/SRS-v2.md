@@ -357,7 +357,7 @@ Nguồn: Roster CSV.
 ## Binding
 
 - `Platform` (`telegram` | `discord`)
-- `PlatformUserID` (Telegram chat ID / Discord user ID)
+- `PlatformUserID` (Telegram user ID — lấy từ sender trong DM, không dùng chat ID của group / Discord user ID)
 - `MSSV`
 - `Verified` (bool)
 - `BoundAt`
