@@ -52,18 +52,23 @@ func (h *Guest) Start(c telebot.Context) error {
 }
 
 // GetMark serves /mark. In v2 (when identity is wired) it resolves the caller's
-// MSSV from their binding: /mark <course> shows that course; /mark alone would
-// show all — but Telegram groups every course, so with a course arg it returns
-// one; without args and bound, it tells the user to specify a course. When
-// identity is NOT wired (v1), the legacy /mark <course> <studentId> form still
-// works for compatibility.
+// MSSV from their binding — DM-only, keyed by sender (issue #38): /mark <course>
+// shows that course; /mark alone would show all — but Telegram groups every
+// course, so with a course arg it returns one; without args and bound, it tells
+// the user to specify a course. When identity is NOT wired (v1), the legacy
+// /mark <course> <studentId> form still works for compatibility.
 func (h *Guest) GetMark(c telebot.Context) error {
 	args := c.Args()
 
-	// v2 path: identity present → must bind.
+	// v2 path: identity present → must bind. Identity is personal: resolve by
+	// sender, and only in DM — a group reply would expose the sender's MSSV
+	// binding to everyone (issue #38).
 	if h.identity != nil {
-		chatID := c.Chat().ID
-		b, err := h.identity.GetBinding(platformTelegram, platformUserID(chatID))
+		if !isPrivate(c) {
+			return helpers.Send(c, "Lệnh này chỉ dùng trong nhắn riêng (DM) với bot. Hãy /bind rồi dùng /mark <mã lớp> qua DM.")
+		}
+		userID := c.Sender().ID
+		b, err := h.identity.GetBinding(platformTelegram, platformUserID(userID))
 		if err != nil || !b.Verified {
 			return helpers.Send(c, "Chưa xác thực. Dùng /bind để liên kết MSSV.")
 		}
@@ -74,7 +79,7 @@ func (h *Guest) GetMark(c telebot.Context) error {
 		if !h.courseRules.IsValidCourseId(courseId) {
 			return models.NewArgValueMismatchError("course invalid")
 		}
-		log.Info().Int64("chatId", chatID).Str("course", courseId).Str("mssv", b.MSSV).Msg("Get mark (bound)")
+		log.Info().Int64("senderId", userID).Int64("chatId", c.Chat().ID).Str("course", courseId).Str("mssv", b.MSSV).Msg("Get mark (bound)")
 		msg, err := h.markRepo.GetMark(courseId, b.MSSV)
 		if err != nil {
 			return helpers.Send(c, "Chưa có điểm cho "+courseId+".")
