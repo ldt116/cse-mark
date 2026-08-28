@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"strings"
+	"time"
+
 	"github.com/rs/zerolog/log"
 	"gopkg.in/telebot.v3"
-	"strings"
 	"thuanle/cse-mark/internal/delivery/tele/handlers/helpers"
 	"thuanle/cse-mark/internal/delivery/tele/models"
 	"thuanle/cse-mark/internal/domain/binding"
@@ -16,6 +18,9 @@ type Guest struct {
 
 	markRepo mark.Repository
 
+	// courseLister feeds the no-arg /mark summary (every enrolled course).
+	courseLister courseLister
+
 	// identity resolves the bound MSSV for a Telegram chat (v2 /mark). Nil in
 	// v1-only wiring; GetMark falls back to the legacy courseId+studentId form.
 	identity identityLookup
@@ -26,11 +31,22 @@ type identityLookup interface {
 	GetBinding(platform, platformUserID string) (binding.Model, error)
 }
 
+// courseLister is the subset of course.Repository the guest /mark handler uses.
+type courseLister interface {
+	FindCoursesUpdatedAfter(since time.Time) ([]course.Model, error)
+}
+
 type GuestOpts func(*Guest)
 
 // WithGuestIdentity injects identity so /mark resolves MSSV from the binding.
 func WithGuestIdentity(id identityLookup) GuestOpts {
 	return func(g *Guest) { g.identity = id }
+}
+
+// WithGuestCourseLister injects the course repository so /mark without a
+// course arg can summarize every enrolled course.
+func WithGuestCourseLister(cl courseLister) GuestOpts {
+	return func(g *Guest) { g.courseLister = cl }
 }
 
 func NewGuestHandler(courseRules *course.Rules, markRepo mark.Repository, opts ...GuestOpts) *Guest {
@@ -53,9 +69,8 @@ func (h *Guest) Start(c telebot.Context) error {
 
 // GetMark serves /mark. In v2 (when identity is wired) it resolves the caller's
 // MSSV from their binding — DM-only, keyed by sender (issue #38): /mark <course>
-// shows that course; /mark alone would show all — but Telegram groups every
-// course, so with a course arg it returns one; without args and bound, it tells
-// the user to specify a course. When identity is NOT wired (v1), the legacy
+// shows that course; /mark alone summarizes every course the student has marks
+// in (mirroring Discord /mark). When identity is NOT wired (v1), the legacy
 // /mark <course> <studentId> form still works for compatibility.
 func (h *Guest) GetMark(c telebot.Context) error {
 	args := c.Args()
@@ -79,7 +94,7 @@ func (h *Guest) GetMark(c telebot.Context) error {
 			return helpers.Send(c, "Chưa xác thực. Dùng /bind để liên kết MSSV.")
 		}
 		if len(args) < 1 {
-			return helpers.Send(c, "Dùng /mark <mã lớp> để xem điểm môn đó.")
+			return h.sendAllCourses(c, b.MSSV)
 		}
 		courseId := args[0]
 		if !h.courseRules.IsValidCourseId(courseId) {
@@ -120,4 +135,30 @@ func (h *Guest) GetMark(c telebot.Context) error {
 	}
 
 	return helpers.SendPre(c, msg)
+}
+
+// sendAllCourses summarizes the student's marks across every course, mirroring
+// the Discord /mark summary: courses the student has no mark in are skipped,
+// and with no marks at all the user gets a plain notice.
+func (h *Guest) sendAllCourses(c telebot.Context, mssv string) error {
+	if h.courseLister == nil {
+		return helpers.Send(c, "Dùng /mark <mã lớp> để xem điểm môn đó.")
+	}
+	courses, err := h.courseLister.FindCoursesUpdatedAfter(time.Unix(0, 0))
+	if err != nil {
+		log.Warn().Err(err).Msg("list courses for /mark summary failed")
+		return helpers.Send(c, "Không lấy được danh sách lớp lúc này. Thử lại sau.")
+	}
+	var b strings.Builder
+	for _, cs := range courses {
+		m, err := h.markRepo.GetMark(cs.Id, mssv)
+		if err != nil {
+			continue
+		}
+		b.WriteString(cs.Id + "\n" + m + "\n\n")
+	}
+	if b.Len() == 0 {
+		return helpers.Send(c, "Chưa có điểm nào.")
+	}
+	return helpers.SendPre(c, strings.TrimSpace(b.String()))
 }

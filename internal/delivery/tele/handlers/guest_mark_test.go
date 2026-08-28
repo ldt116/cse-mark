@@ -2,10 +2,20 @@ package handlers
 
 import (
 	"testing"
+	"time"
 
 	"thuanle/cse-mark/internal/domain/binding"
 	"thuanle/cse-mark/internal/domain/course"
+	"thuanle/cse-mark/internal/domain/mark"
 )
+
+type fakeCourseRepo struct {
+	courses []course.Model
+}
+
+func (f *fakeCourseRepo) FindCoursesUpdatedAfter(time.Time) ([]course.Model, error) {
+	return f.courses, nil
+}
 
 type fakeMarkRepo struct {
 	mark   string
@@ -67,6 +77,41 @@ func TestGetMark_GroupPlainTextSilent(t *testing.T) {
 	}
 	if ident.bindingKey != "" || mr.gotStudent != "" {
 		t.Fatal("group chatter must not resolve identity or query marks")
+	}
+}
+
+// /mark with no args summarizes every enrolled course, mirroring Discord /mark.
+func TestGetMark_PrivateNoArgsShowsAllCourses(t *testing.T) {
+	ident := &fakeIdentity{existing: binding.Model{MSSV: "2013307", Verified: true}}
+	mr := &fakeMarkRepo{mark: "HT: 9.0"}
+	cr := &fakeCourseRepo{courses: []course.Model{{Id: "CO2003"}, {Id: "CO3007"}}}
+	g := NewGuestHandler(&course.Rules{}, mr, WithGuestIdentity(ident), WithGuestCourseLister(cr))
+	c := privateCtx(7, 42)
+
+	if err := g.GetMark(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.sent) != 1 {
+		t.Fatalf("want one summary reply, got %v", c.sent)
+	}
+	if !contains("CO2003", c.sent[0]) || !contains("CO3007", c.sent[0]) {
+		t.Fatalf("summary must list both courses, got %q", c.sent[0])
+	}
+}
+
+// A course the student has no mark in is skipped, not an error.
+func TestGetMark_PrivateNoArgsSkipsCoursesWithoutMarks(t *testing.T) {
+	ident := &fakeIdentity{existing: binding.Model{MSSV: "2013307", Verified: true}}
+	mr := &fakeMarkRepo{getErr: mark.ErrNotFound}
+	cr := &fakeCourseRepo{courses: []course.Model{{Id: "CO2003"}}}
+	g := NewGuestHandler(&course.Rules{}, mr, WithGuestIdentity(ident), WithGuestCourseLister(cr))
+	c := privateCtx(7, 42)
+
+	if err := g.GetMark(c); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.sent) != 1 || !contains("Chưa có điểm", c.sent[0]) {
+		t.Fatalf("want no-marks notice, got %v", c.sent)
 	}
 }
 

@@ -19,8 +19,12 @@ func ProvideSender(config *configs.Config) emailport.Sender {
 }
 
 // ProvideGuestHandler builds the guest handler with identity injected so /mark
-// resolves MSSV from the binding (v2). identity is a concrete *identity.Service,
-// which satisfies the identityLookup interface via GetBinding.
-func ProvideGuestHandler(rules *course.Rules, markRepo mark.Repository, ident *identity.Service) *handlers.Guest {
-	return handlers.NewGuestHandler(rules, markRepo, handlers.WithGuestIdentity(ident))
+// resolves MSSV from the binding (v2), plus the course repository so /mark
+// without a course arg summarizes every enrolled course. identity is a concrete
+// *identity.Service, which satisfies the identityLookup interface via GetBinding.
+func ProvideGuestHandler(rules *course.Rules, markRepo mark.Repository, courseRepo course.Repository, ident *identity.Service) *handlers.Guest {
+	return handlers.NewGuestHandler(rules, markRepo,
+		handlers.WithGuestIdentity(ident),
+		handlers.WithGuestCourseLister(courseRepo),
+	)
 }
