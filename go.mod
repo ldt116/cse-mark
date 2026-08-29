@@ -11,7 +11,7 @@ require (
 	github.com/jedib0t/go-pretty/v6 v6.8.3
 	github.com/joho/godotenv v1.5.1
 	github.com/rs/zerolog v1.35.1
-	go.mongodb.org/mongo-driver/v2 v2.8.0
+	go.mongodb.org/mongo-driver/v2 v2.8.2
 	gopkg.in/telebot.v3 v3.3.8
 )
 
