@@ -168,11 +168,9 @@ set course status = active (TRƯỚC khi fetch — poller tiếp tục kể cả
   │
   ▼
 markimport.FetchMarkLinkIntoCourse (tải lại CSV theo link đã lưu, /create)
-  │
-  ▼ (Discord) classsync reconcile role ngay (như §5 cho 1 lớp)
 ```
 
-> Telegram `/sync` dừng sau markimport (không có role).
+> Cả Discord lẫn Telegram đều không reconcile role ngay — role được cập nhật ở chu kỳ role-sync kế tiếp (§5).
 
 ## 8. Telegram `/clear <courseId>`
 
