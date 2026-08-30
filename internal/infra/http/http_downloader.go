@@ -1,9 +1,10 @@
 package http
 
 import (
-	"context"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -14,7 +15,6 @@ import (
 
 type SimpleDownloader struct {
 	Client *http.Client
-	ctx    context.Context
 }
 
 func NewSimpleDownloader(config *configs.Config) downloader.Repository {
@@ -26,12 +26,31 @@ func NewSimpleDownloader(config *configs.Config) downloader.Repository {
 }
 
 func (d *SimpleDownloader) DownloadCSV(url string) ([][]string, error) {
+	return d.download(url, "")
+}
+
+func (d *SimpleDownloader) DownloadCSVAuthorized(url string, token string) ([][]string, error) {
+	return d.download(url, token)
+}
+
+// download performs the HTTP GET (with bearer token when token != "") and
+// parses the CSV body. Non-2xx responses are surfaced as *downloader.FeedError
+// so callers can classify config/permanent/transient failures.
+func (d *SimpleDownloader) download(rawURL, token string) ([][]string, error) {
 	// The CSV URL may carry a secret token in the path/query (e.g. a roster
 	// link); log only its host, never the full URL.
-	log.Info().Str("host", hostOf(url)).Msg("Downloading CSV")
+	log.Info().Str("host", hostOf(rawURL)).Msg("Downloading CSV")
 
-	// Make an HTTP GET request to the specified URL
-	resp, err := http.Get(url)
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		log.Error().Err(err).Msg("Error building request")
+		return nil, err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := d.Client.Do(req)
 	if err != nil {
 		// net/http wraps transport errors as *url.Error, whose Error() embeds
 		// the full URL (token included). Unwrap to the underlying cause so the
@@ -40,6 +59,19 @@ func (d *SimpleDownloader) DownloadCSV(url string) ([][]string, error) {
 		return nil, redactURLErr(err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		code := ""
+		var envelope struct {
+			Error string `json:"error"`
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		if readErr == nil && json.Unmarshal(body, &envelope) == nil {
+			code = envelope.Error
+		}
+		log.Warn().Int("status", resp.StatusCode).Str("code", code).Str("host", hostOf(rawURL)).Msg("Feed returned error status")
+		return nil, &downloader.FeedError{Status: resp.StatusCode, Code: code}
+	}
 
 	// Parse the CSV data and extract URLs
 	reader := csv.NewReader(resp.Body)
