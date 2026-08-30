@@ -45,18 +45,28 @@ func NewJwksClient(url string, timeout, ttl time.Duration) *JwksClient {
 
 // SigningKey returns the Ed25519 public key for kid. A fresh cache hit returns
 // immediately; a kid missing from a fresh cache triggers one refresh (rotation)
-// before giving up with ErrUnknownKid. A refresh failure returns
-// ErrUnavailable and leaves the previously cached keys intact.
+// before giving up with ErrUnknownKid — unless the fresh cache is an empty key
+// set, which is served as-is until the TTL expires (no per-call refetching). A
+// refresh failure returns ErrUnavailable and leaves the previously cached keys
+// intact.
 func (c *JwksClient) SigningKey(kid string) (ed25519.PublicKey, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if len(c.keys) > 0 && time.Since(c.fetchedAt) < c.ttl {
+	// Fresh means "successfully fetched recently", even if that fetch yielded
+	// zero usable keys: an empty key set must still be served from cache until
+	// the TTL expires, instead of refetching on every call.
+	if !c.fetchedAt.IsZero() && time.Since(c.fetchedAt) < c.ttl {
 		if key, ok := c.keys[kid]; ok {
 			return key, nil
 		}
 		// The kid may have been rotated in after this cache entry was fetched
-		// — refresh once and look again.
+		// — refresh once and look again. An empty cached key set, however, was
+		// fetched whole within the TTL: a refetch cannot surface the kid and
+		// would hammer the endpoint on every call, so fail fast instead.
+		if len(c.keys) == 0 {
+			return nil, jwks.ErrUnknownKid
+		}
 		if err := c.refreshLocked(); err != nil {
 			return nil, err
 		}

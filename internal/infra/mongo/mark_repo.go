@@ -36,12 +36,19 @@ func (r *MarkRepo) GetMark(courseId string, studentId string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
 	err := r.db.Collection(courseId).FindOne(ctx, filter).Decode(&result)
-	if err != nil && errors.Is(err, mongo.ErrNoDocuments) {
-		err = mark.ErrNotFound
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return "", mark.ErrNotFound
+		}
+		// Infrastructure failure (network, timeout, ...): surface it instead of
+		// marshaling a nil result into "null" and reporting success.
 		return "", err
 	}
 
 	jsonStr, err := json.MarshalIndent(result, "", " ")
+	if err != nil {
+		return "", err
+	}
 	return string(jsonStr), nil
 }
 

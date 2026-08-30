@@ -251,6 +251,34 @@ func TestVerify_MissingSub(t *testing.T) {
 	}
 }
 
+// TestVerify_MissingExp locks jwt.WithExpirationRequired: a token with valid
+// iss/aud/sub and signature but NO exp claim must be rejected as ErrInvalid —
+// a token that never expires must not be accepted. Minted inline (not via
+// mintToken) because mintToken always sets ExpiresAt.
+func TestVerify_MissingExp(t *testing.T) {
+	key := newKeyPair(t)
+	repo := &fakeJwks{keys: map[string]ed25519.PublicKey{"key-a": key.pub}}
+
+	claims := jwt.RegisteredClaims{
+		Issuer:   testIssuer,
+		Audience: jwt.ClaimStrings{testAudience},
+		Subject:  testSubject,
+		IssuedAt: jwt.NewNumericDate(time.Now()),
+		// ExpiresAt deliberately unset.
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	tok.Header["kid"] = "key-a"
+	token, err := tok.SignedString(key.priv)
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+
+	_, err = newService(repo).Verify(token)
+	if !errors.Is(err, ErrInvalid) {
+		t.Errorf("Verify() error = %v, want ErrInvalid", err)
+	}
+}
+
 func TestVerify_RotationNewKid(t *testing.T) {
 	keyA := newKeyPair(t)
 	repo := &fakeJwks{keys: map[string]ed25519.PublicKey{"key-a": keyA.pub}}

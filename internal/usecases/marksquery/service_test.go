@@ -168,9 +168,12 @@ func TestQuery_CourseFilterStudentMissing(t *testing.T) {
 	}
 }
 
-// TestQuery_WireFormat locks the final JSON wire format (json tags, nil -> [],
-// no HTML escaping / re-indentation of the verbatim marks), which the struct
-// field assertions above cannot catch.
+// TestQuery_WireFormat locks the final JSON wire format (json tags, empty ->
+// [], verbatim marks without re-indentation), which the struct field
+// assertions above cannot catch. Note on HTML escaping: the fixture contains
+// no <>& characters, because BOTH sides escape HTML by default (json.Marshal
+// here and gin's c.JSON in the handler use encoding/json with EscapeHTML
+// enabled), so the test locks the verbatim passthrough, not escaping behavior.
 func TestQuery_WireFormat(t *testing.T) {
 	courseRepo, markRepo := newAllCoursesFakes()
 	s := NewService(courseRepo, markRepo)

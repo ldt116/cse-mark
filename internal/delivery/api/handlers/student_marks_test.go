@@ -253,6 +253,28 @@ func TestStudentMarksGetAll_NoMarks(t *testing.T) {
 	}
 }
 
+// TestStudentMarksGetAll_UnknownCourseFilter pins the course_id filter
+// behavior for a course the student has no marks in (fake repos answer
+// mark.ErrNotFound / course.ErrNotFound): 200 with an empty array, not 404 —
+// the response leaks nothing about which courses exist.
+func TestStudentMarksGetAll_UnknownCourseFilter(t *testing.T) {
+	courseRepo := &fakeCourseRepo{courses: []course.Model{{Id: "c1"}}}
+	markRepo := &fakeMarkRepo{marks: map[string]string{}}
+	engine, mint := newMarksEnv(t, courseRepo, markRepo)
+
+	w := serveMarks(engine, mint("2111111"), "?course_id=CO9999-unknown")
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Errorf("body = %s, want []", w.Body.String())
+	}
+	if courseRepo.findCalled {
+		t.Error("FindCoursesUpdatedAfter called for a course_id query, want the single-course branch only")
+	}
+}
+
 func TestStudentMarksGetAll_RepoError(t *testing.T) {
 	courseRepo := &fakeCourseRepo{courses: []course.Model{{Id: "c1"}}}
 	markRepo := &fakeMarkRepo{err: errors.New("connection lost")}

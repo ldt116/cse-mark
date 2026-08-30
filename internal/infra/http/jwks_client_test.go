@@ -251,3 +251,89 @@ func TestSigningKey_SkipsBadEntries(t *testing.T) {
 		t.Fatalf("bad entry must be skipped, expected ErrUnknownKid, got %v", err)
 	}
 }
+
+// TestSigningKey_SkipsWrongShapeEntries pins the refreshLocked guards
+// (#44 final review F7): entries that decode to something other than a
+// 32-byte Ed25519 public key (here 31 bytes), or carry a wrong kty/crv or an
+// empty kid, must be skipped without panic — a hostile or buggy JWKS document
+// must not crash the client (ed25519.Verify panics on wrong-length keys, the
+// len(raw) != ed25519.PublicKeySize check is what keeps them out).
+func TestSigningKey_SkipsWrongShapeEntries(t *testing.T) {
+	stub, srv := newJwksStub(t)
+	stub.setRaw(fmt.Sprintf(`{"keys":[
+		{"kty":"OKP","crv":"Ed25519","kid":"short-x","x":"%s"},
+		{"kty":"RSA","crv":"Ed25519","kid":"wrong-kty","x":"%s"},
+		{"kty":"OKP","crv":"P-256","kid":"wrong-crv","x":"%s"},
+		{"kty":"OKP","crv":"Ed25519","kid":"","x":"%s"}
+	]}`,
+		base64.RawURLEncoding.EncodeToString(make([]byte, 31)), // one byte short
+		base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
+		base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
+		base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
+	))
+
+	client := NewJwksClient(srv.URL, 2*time.Second, longTTL)
+
+	for _, kid := range []string{"short-x", "wrong-kty", "wrong-crv", ""} {
+		if _, err := client.SigningKey(kid); !errors.Is(err, jwks.ErrUnknownKid) {
+			t.Errorf("SigningKey(%q): %v, want ErrUnknownKid (entry must be skipped, no panic)", kid, err)
+		}
+	}
+}
+
+// TestSigningKey_EmptyKeysetServedFromCache pins #44 final review F3: a JWKS
+// document with zero usable keys is still a successful fetch, so the cache
+// must treat it as fresh — a second lookup is served from cache (no refetch)
+// and fails with ErrUnknownKid, instead of hammering the endpoint on every
+// single call for as long as the endpoint keeps returning an empty key set.
+func TestSigningKey_EmptyKeysetServedFromCache(t *testing.T) {
+	stub, srv := newJwksStub(t)
+	stub.setRaw(`{"keys":[]}`)
+
+	client := NewJwksClient(srv.URL, 2*time.Second, longTTL)
+
+	if _, err := client.SigningKey("kid-a"); !errors.Is(err, jwks.ErrUnknownKid) {
+		t.Fatalf("first SigningKey on empty key set: %v, want ErrUnknownKid", err)
+	}
+	if n := stub.requests(); n != 1 {
+		t.Fatalf("expected 1 request after first call, got %d", n)
+	}
+
+	if _, err := client.SigningKey("kid-a"); !errors.Is(err, jwks.ErrUnknownKid) {
+		t.Fatalf("second SigningKey on empty key set: %v, want ErrUnknownKid", err)
+	}
+	if n := stub.requests(); n != 1 {
+		t.Fatalf("empty key set must be served from cache within TTL: expected still 1 request, got %d", n)
+	}
+}
+
+// TestSigningKey_EmptyKeysetRecoversAfterTtl is the other half of F3: the
+// empty-key-set cache is still TTL-bounded, so once the endpoint recovers and
+// the TTL expires, the client must pick the recovered keys up — the fail-fast
+// path never turns into a permanently stuck empty cache.
+func TestSigningKey_EmptyKeysetRecoversAfterTtl(t *testing.T) {
+	stub, srv := newJwksStub(t)
+	_, pubA := mustGenerateKey(t)
+
+	client := NewJwksClient(srv.URL, 2*time.Second, 50*time.Millisecond)
+
+	stub.setRaw(`{"keys":[]}`)
+	if _, err := client.SigningKey("kid-a"); !errors.Is(err, jwks.ErrUnknownKid) {
+		t.Fatalf("SigningKey on empty key set: %v, want ErrUnknownKid", err)
+	}
+
+	time.Sleep(60 * time.Millisecond)
+
+	// The endpoint recovers with a real key.
+	stub.setKeys(map[string]ed25519.PublicKey{"kid-a": pubA})
+	got, err := client.SigningKey("kid-a")
+	if err != nil {
+		t.Fatalf("SigningKey after endpoint recovery and TTL expiry: %v, want nil", err)
+	}
+	if !bytes.Equal(got, pubA) {
+		t.Fatalf("wrong key after recovery: got %x, want %x", got, pubA)
+	}
+	if n := stub.requests(); n != 2 {
+		t.Fatalf("expected 2 requests (initial empty fetch + refetch after TTL), got %d", n)
+	}
+}
