@@ -68,6 +68,13 @@
 |---|---|---|
 | `API_TOKEN` | — | token auth cho `GET /mark` |
 | `API_PORT` | `8080` | port HTTP |
+| `AUTH_JWKS_URL` | `https://student.thuanle.me/.well-known/jwks.json` | **mới (#44)** — JWKS của student app, dùng verify JWT cho `GET /marks` |
+| `AUTH_JWT_ISSUER` | `https://student.thuanle.me` | **mới (#44)** — `iss` mong đợi của assertion |
+| `AUTH_JWT_AUDIENCE` | `cse-mark` | **mới (#44)** — `aud` mong đợi của assertion |
+
+JWKS cache TTL `5m` và HTTP timeout `15s` là **const trong code** (`cmd/api/wire.go`), không phải env.
+Kid lạ không có trong cache còn fresh → refresh JWKS đúng 1 lần rồi mới trả lỗi (hỗ trợ key rotation);
+refresh fail → `jwks.ErrUnavailable` (503 `jwks_unavailable`), bộ key đã cache giữ nguyên.
 
 ## 7. Cấu trúc Config (Go)
 
@@ -81,6 +88,9 @@ type Config struct {
     TeleToken string; TeleAdminChatIds []int64
     ApiToken, ApiPort string
     CourseActiveAge, DownloaderTimeout, DbTransactionTimeout time.Duration
+
+    // v2 — grade-share student-app JWT (#44)
+    AuthJwksURL, AuthJwtIssuer, AuthJwtAudience string
 
     // v2 — Mongo collections
     DbSettingsDiscordMappings, DbSettingsStudents string

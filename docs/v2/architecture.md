@@ -13,7 +13,7 @@
 
 | Service | Binary | Loại | Trách nhiệm |
 |---|---|---|---|
-| API | `cmd/api` | HTTP (Gin) | `GET /healthz`, `GET /mark` (giữ nguyên) |
+| API | `cmd/api` | HTTP (Gin) | `GET /healthz`, `GET /mark` (giữ nguyên) + `GET /marks` (mới #44 — JWT student app, xem §7) |
 | Fetcher | `cmd/fetcher` | Scheduler | mark sync 10p (hiện có) **+ roster sync** (mới) |
 | Tele | `cmd/tele` | Bot (long-poll) | Telegram: tra cứu + bind (mở rộng tối thiểu) |
 | Discord | `cmd/discord` | Bot + Scheduler | Discord bot + role-sync scheduler (mới) |
@@ -53,6 +53,7 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 | `domain/verification` | **mới** | `Model{PlatformUserID,Email,OTP,Expiry time.Time}`, `Repository` (TTL qua kiểu Date) |
 | `domain/discord` | **mới (port)** | interface `Bot` (xem §4) |
 | `domain/email` | **mới (port)** | interface `Sender` (xem §4) |
+| `domain/jwks` | **mới (#44, port)** | `Repository.SigningKey(kid)` — resolve Ed25519 public key từ JWKS student app (`ErrUnavailable`, `ErrUnknownKid`) |
 
 ### 3.2 Use cases
 
@@ -64,13 +65,15 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 | `usecases/marksync` | hiện có | scheduler mark sync 10p |
 | `usecases/identity` | **mới** | `BindStart` (kiểm tra roster trước khi sinh OTP, gửi), `BindVerify` (lưu binding), `GetBinding` |
 | `usecases/rostersync` | **mới** | download roster CSV → `student` repo |
+| `usecases/assertion` | **mới (#44)** | verify JWT EdDSA (iss/aud/exp bắt buộc) qua JWKS, trả `sub` = MSSV |
+| `usecases/marksquery` | **mới (#44)** | tra điểm 1 SV theo MSSV across courses từ mark cache |
 | `usecases/classsync` | **mới** | enrollment → diff role Discord qua `discord.Bot` |
 
 ### 3.3 Delivery
 
 | Gói | Trạng thái |
 |---|---|
-| `delivery/api` | hiện có (Gin) |
+| `delivery/api` | hiện có (Gin) + `GET /marks` với middleware `Jwt` riêng (mới #44) |
 | `delivery/tele` | hiện có + handler `/bind` + sửa `/mark` |
 | `delivery/discord` | **mới** (discordgo) — `/bind /profile /mark /create /sync` + middleware auth theo binding và admin whitelist |
 
@@ -79,7 +82,7 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 | Gói | Trạng thái |
 |---|---|
 | `infra/mongo` | hiện có + repo mới: `student`, `binding`, `verification` (TTL Date), `discord_mapping` |
-| `infra/http` | hiện có (`SimpleDownloader`) |
+| `infra/http` | hiện có (`SimpleDownloader`) + `JwksClient` (mới #44 — cache TTL 5m, kid lạ refresh 1 lần) |
 | `infra/discord` | **mới** — `discordgo` client implement `discord.Bot` (hỗ trợ rate-limit backoff) |
 | `infra/email` | **mới** — SMTP implement `email.Sender` |
 
@@ -118,7 +121,7 @@ type Sender interface {
 
 Mỗi service compose đúng những thứ cần:
 
-- **api** (giữ nguyên): config → mongo client → MarkRepo → handlers → ApiService.
+- **api** (mở rộng #44): config → mongo client → CourseRepo + MarkRepo → handlers → ApiService; thêm `http.JwksClient` (`AUTH_JWKS_URL`, TTL/timeout const) → `assertion.Service` (iss/aud từ config) → middleware `Jwt` + `marksquery.Service` cho `GET /marks`.
 - **fetcher** (mở rộng): + RosterRepo + StudentRepo + `rostersync.Service`. Scheduler chạy cả mark sync và roster sync.
 - **tele** (mở rộng): + StudentRepo + BindingRepo + VerificationRepo + `identity.Service` + `email.Sender` (gửi OTP). Handler `/bind` + `/mark` dùng binding.
 - **discord** (mới): giống tele + CourseRepo + DiscordMappingRepo + `discord.Bot` + `classsync.Service` (role-sync scheduler).
@@ -132,4 +135,23 @@ Roster CSV ──fetcher──▶ student repo ──▶ identity.BindStart/Bind
 Class CSV  ──fetcher──▶ mark cache ──▶ enrollment ──▶ classsync ──▶ discord.Bot (role)
                                           │
 /mark  ──tele/discord──▶ identity.GetBinding(PlatformUserID) ──▶ mark repo ──▶ reply
+/marks ──api(JWT #44)─▶ assertion.Verify(sub=MSSV) ──▶ marksquery ──▶ mark repo ──▶ JSON
 ```
+
+## 7. `GET /marks` — tra điểm cho student app (mới, #44)
+
+Endpoint trên binary api (`cmd/api`), chạy **cùng** `/mark` cũ: `/mark` vẫn auth bằng static token (`API_TOKEN`), nguyên vẹn; `/marks` dùng middleware `Jwt` riêng — auth bằng JWT của student app.
+
+- **Auth:** header `Authorization: Bearer <JWT>`; verify chữ ký **EdDSA** (whitelist chỉ EdDSA), key resolve theo header `kid` từ JWKS của student app (`AUTH_JWKS_URL`); kiểm `iss` (`AUTH_JWT_ISSUER`), `aud` (`AUTH_JWT_AUDIENCE`), `exp` bắt buộc. Claim `sub` = MSSV — identity duy nhất, lấy từ context, không nhận từ query.
+- **Response `200`:** luôn là mảng `[{"courseId":"...","marks":{...}}]`; `[]` khi không có dữ liệu (MSSV lạ, `course_id` lạ, SV không có mark doc của môn đó). Header `Cache-Control: no-store`. Query `course_id` tuỳ chọn lọc 1 môn; tham số MSSV/student **bị bỏ qua**.
+- **KHÔNG gate email** — mapping email→MSSV thuộc contact-stu upstream (hcmut-util #146); api chỉ tin claim `sub`.
+- **Lỗi:**
+
+| HTTP | `error` | Khi nào |
+|---|---|---|
+| 401 | `jwt_invalid` | thiếu/sai prefix `Bearer`, chữ ký/iss/aud/alg sai, kid lạ, thiếu `sub` |
+| 401 | `jwt_expired` | claim `exp` đã quá hạn |
+| 503 | `jwks_unavailable` | không fetch/parse được JWKS endpoint |
+| 500 | `internal_error` | lỗi đọc mark cache không mong muốn |
+
+- **Deploy pairing:** JWKS default trỏ student app (hcmut-util #151) — `https://student.thuanle.me/.well-known/jwks.json`.

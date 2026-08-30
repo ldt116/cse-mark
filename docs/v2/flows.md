@@ -159,3 +159,34 @@ Admin /clear
 ```
 
 > `/clear` chỉ dọn dữ liệu backend. Role/channel Discord và bản ghi `discord_mappings` không bị xoá tự động trong phạm vi v2 hiện tại; nếu cần, Admin dọn thủ công ngoài hệ thống.
+
+## 9. Tra điểm qua HTTP — `GET /marks` (#44, grade-share)
+
+```text
+student app  GET /marks[?course_id=...]
+  │  Authorization: Bearer <JWT student app>
+  ▼
+[middleware Jwt]
+  • verify chữ ký EdDSA (chỉ EdDSA) — key resolve theo header kid
+    từ JWKS student app (AUTH_JWKS_URL; cache TTL 5m, kid lạ → refresh 1 lần)
+  • kiểm iss (AUTH_JWT_ISSUER), aud (AUTH_JWT_AUDIENCE), exp bắt buộc
+  • claim sub = MSSV → gin context
+       └─ sai → 401 jwt_invalid / 401 jwt_expired
+       └─ JWKS lỗi → 503 jwks_unavailable
+  │
+  ▼
+[marksquery] Query(sub, course_id)
+  • không course_id: duyệt mọi course, bỏ course SV không có mark doc
+  • có course_id: GetMark(courseId, MSSV)
+  │
+  ▼
+200 [{"courseId": "...", "marks": {...}}]   — luôn là mảng, [] khi không có dữ liệu
+Cache-Control: no-store
+```
+
+Bắt lỗi: 401 `jwt_invalid` / 401 `jwt_expired` / 503 `jwks_unavailable` / 500 `internal_error`.
+
+- Chạy trên binary api **cùng** `/mark` cũ — `/mark` vẫn auth `API_TOKEN`, route và middleware riêng.
+- Tham số query MSSV/student **bị bỏ qua** — identity chỉ từ claim `sub`.
+- KHÔNG gate email: mapping email→MSSV thuộc contact-stu phía hcmut-util upstream (#146).
+- Deploy pairing với student app (hcmut-util #151) — JWKS default `https://student.thuanle.me/.well-known/jwks.json`.
