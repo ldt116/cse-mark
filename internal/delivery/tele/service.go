@@ -3,7 +3,6 @@ package tele
 import (
 	"github.com/rs/zerolog/log"
 	"gopkg.in/telebot.v3"
-	"gopkg.in/telebot.v3/middleware"
 	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/delivery/tele/handlers"
 	"thuanle/cse-mark/internal/delivery/tele/middlewares"
@@ -93,8 +92,10 @@ func NewService(config *configs.Config,
 	teacherOnly.Handle("/load", teacherHandler.LoadCourseLink)
 	teacherOnly.Handle("/clear", teacherHandler.ClearCourseLink)
 
+	// Repo-local nil-safe Whitelist: the upstream middleware.Whitelist derefs
+	// c.Sender().ID and panics on anonymous group admins (sender_chat only).
 	adminOnly := b.Group()
-	adminOnly.Use(middleware.Whitelist(config.TeleAdminChatIds...))
+	adminOnly.Use(middlewares.Whitelist(config.TeleAdminChatIds...))
 	adminOnly.Handle("/teacher", adminHandler.SetTeacher)
 	// /sync is the manual re-enable for stale/inactive courses (#43), gated to
 	// admin chats like /teacher.

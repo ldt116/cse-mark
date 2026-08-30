@@ -139,6 +139,15 @@ func (h *Teacher) SyncCourse(c telebot.Context) error {
 		return err
 	}
 
+	// SetCourseStatus must not touch updated_at, but FindSyncableCourses gates
+	// on updated_at > now-9 months — a course revived after >9 months would be
+	// fetched inline once and then dropped by the poller (#43). Re-write the
+	// stored link (blank legacy by_id/by_user, same convention as /create) to
+	// refresh updated_at and reopen the window.
+	if err := h.courseRepo.UpdateCourseLink(courseId, cm.Link, 0, ""); err != nil {
+		return err
+	}
+
 	count, err := h.markImportService.FetchMarkLinkIntoCourse(courseId, cm.Link)
 	if err != nil {
 		return err

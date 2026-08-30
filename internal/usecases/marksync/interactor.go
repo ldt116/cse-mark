@@ -18,7 +18,7 @@ type Service struct {
 	markImportService  *markimport.Service
 
 	fetchingInterval   time.Duration
-	slowPollInterval   time.Duration // re-probe delay after config/permanent errors
+	slowPollInterval   time.Duration // re-probe delay after config-token (401) / permanent-mon (403, 404) errors; 410 goes inactive without re-probe
 	transientThreshold int           // consecutive transient failures before "unhealthy"
 
 	consecutiveFailures map[string]int

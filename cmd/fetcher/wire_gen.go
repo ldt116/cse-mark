@@ -9,7 +9,6 @@ package main
 import (
 	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/domain/course"
-	"thuanle/cse-mark/internal/domain/downloader"
 	"thuanle/cse-mark/internal/infra/http"
 	"thuanle/cse-mark/internal/infra/mongo"
 	"thuanle/cse-mark/internal/usecases/coursequery"
@@ -29,15 +28,13 @@ func InitializeApp() (*App, error) {
 	repository := mongo.NewCourseRepo(client, config)
 	rules := course.NewRules(config)
 	activeCourseService := coursequery.NewActiveCourseService(repository, rules)
-	downloaderRepository := http.NewSimpleDownloader(config)
+	simpleDownloader := http.NewSimpleDownloader(config)
 	markRepository := mongo.NewMarkRepo(client, config)
-	// *SimpleDownloader implements both downloader.Repository (marksync/
-	// rostersync) and downloader.AuthorizedRepository (markimport); the ctor
-	// declares the former, so assert the wider interface here.
-	service := markimport.NewService(downloaderRepository.(downloader.AuthorizedRepository), repository, markRepository, config.GvProxyToken)
+	string2 := configs.ProvideGvProxyToken(config)
+	service := markimport.NewService(simpleDownloader, repository, markRepository, string2)
 	marksyncService := marksync.NewService(activeCourseService, repository, service)
 	studentRepository := mongo.NewStudentRepo(client, config)
-	rostersyncService := rostersync.NewService(downloaderRepository, studentRepository, config)
+	rostersyncService := rostersync.NewService(simpleDownloader, studentRepository, config)
 	app := &App{
 		Config:        config,
 		MongoClient:   client,

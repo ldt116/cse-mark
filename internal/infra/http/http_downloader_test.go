@@ -13,10 +13,12 @@ import (
 	"thuanle/cse-mark/internal/domain/downloader"
 )
 
-// newDownloader builds a SimpleDownloader against a test config.
+// newDownloader builds a SimpleDownloader against a test config. The ctor
+// returns the concrete type; the AuthorizedRepository return keeps these tests
+// exercising the interface markimport consumes.
 func newDownloader(t *testing.T) downloader.AuthorizedRepository {
 	t.Helper()
-	return NewSimpleDownloader(&configs.Config{DownloaderTimeout: 5 * time.Second}).(downloader.AuthorizedRepository)
+	return NewSimpleDownloader(&configs.Config{DownloaderTimeout: 5 * time.Second})
 }
 
 func TestDownloadCSVAuthorized_SetsBearerHeader(t *testing.T) {

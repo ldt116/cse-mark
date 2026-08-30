@@ -28,3 +28,10 @@ func ProvideGuestHandler(rules *course.Rules, markRepo mark.Repository, courseRe
 		handlers.WithGuestCourseLister(courseRepo),
 	)
 }
+
+// ProvideBindHandler wraps handlers.NewBindHandler for wire: the handler's
+// identityAPI parameter is an unexported interface, which wire cannot bind
+// from this package. *identity.Service satisfies it.
+func ProvideBindHandler(ident *identity.Service) *handlers.Bind {
+	return handlers.NewBindHandler(ident)
+}

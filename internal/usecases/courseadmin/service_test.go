@@ -25,6 +25,9 @@ type fullFakeCourse struct {
 	err       error
 	statusOn  []course.Status // statuses passed to SetCourseStatus
 	statusIds []string        // courseIds passed to SetCourseStatus
+	linkIds   []string        // courseIds passed to UpdateCourseLink
+	linkUsers []int64         // legacy by_id passed to UpdateCourseLink
+	linkNames []string        // legacy by_user passed to UpdateCourseLink
 	order     *callOrder      // optional shared call log
 }
 
@@ -44,11 +47,26 @@ func (f *fullFakeCourse) FindCourseById(courseId string) (course.Model, error) {
 	}
 	return course.Model{}, course.ErrNotFound
 }
-func (f *fullFakeCourse) UpdateCourseLink(courseId, link string, _ int64, _ string) error {
+func (f *fullFakeCourse) UpdateCourseLink(courseId, link string, userId int64, username string) error {
 	if f.links == nil {
 		f.links = map[string]string{}
 	}
 	f.links[courseId] = link
+	f.linkIds = append(f.linkIds, courseId)
+	f.linkUsers = append(f.linkUsers, userId)
+	f.linkNames = append(f.linkNames, username)
+	if f.order != nil {
+		f.order.record("link:" + courseId)
+	}
+	// Mirror the real repo: the write upserts and refreshes updated_at, which
+	// is what makes FindSyncableCourses see the course again.
+	if f.courses == nil {
+		f.courses = map[string]course.Model{}
+	}
+	c := f.courses[courseId]
+	c.Link = link
+	c.UpdatedAt = time.Now().Unix()
+	f.courses[courseId] = c
 	return nil
 }
 func (f *fullFakeCourse) RemoveCourse(string) error { return nil }
@@ -58,10 +76,25 @@ func (f *fullFakeCourse) SetCourseStatus(courseId string, status course.Status) 
 	if f.order != nil {
 		f.order.record("status:" + courseId + ":" + string(status))
 	}
+	// Mirror the real repo: the status write updates the stored model.
+	if f.courses == nil {
+		f.courses = map[string]course.Model{}
+	}
+	c := f.courses[courseId]
+	c.Status = status
+	f.courses[courseId] = c
 	return nil
 }
-func (f *fullFakeCourse) FindSyncableCourses(time.Time) ([]course.Model, error) {
-	return nil, nil
+// FindSyncableCourses mimics the real gate: updated after since, with a link,
+// and not inactive.
+func (f *fullFakeCourse) FindSyncableCourses(since time.Time) ([]course.Model, error) {
+	var out []course.Model
+	for _, c := range f.courses {
+		if c.UpdatedAt > since.Unix() && c.Link != "" && c.EffectiveStatus() != course.StatusInactive {
+			out = append(out, c)
+		}
+	}
+	return out, nil
 }
 
 type fakeMappingRepo struct {
@@ -288,6 +321,58 @@ func TestSync_FetchFailStillSetActive(t *testing.T) {
 	}
 	if len(cr.statusOn) != 1 || cr.statusOn[0] != course.StatusActive {
 		t.Fatalf("status must be active even when fetch fails, got %v", cr.statusOn)
+	}
+}
+
+// Issue #43 (review pass 2 F3): SetCourseStatus must not touch updated_at, but
+// FindSyncableCourses gates on updated_at > now-9 months. A course revived
+// after >9 months would be fetched inline once and then never again — /sync
+// must also touch updated_at via UpdateCourseLink (same call Create uses, with
+// blank legacy by_id/by_user) so the poller's window reopens.
+func TestSync_RevivedOldCourseReentersPollerWindow(t *testing.T) {
+	order := &callOrder{}
+	old := time.Now().AddDate(-1, 0, 0).Unix() // 12 months ago: outside the gate
+	cr := &fullFakeCourse{
+		courses: map[string]course.Model{
+			"CO2003-L01": {Id: "CO2003-L01", Link: "https://x.co/m.csv", UpdatedAt: old, Status: course.StatusInactive},
+		},
+		order: order,
+	}
+	imp := &fakeImporter{imported: 7, order: order}
+	svc := &Service{rules: rules(), courseRepo: cr, imports: imp, bot: &fakeBot{}}
+	since := time.Now().AddDate(0, -9, 0) // marksync's FindSyncableCourses cutoff
+
+	syncable, _ := cr.FindSyncableCourses(since)
+	if len(syncable) != 0 {
+		t.Fatalf("precondition: revived course must start outside the poller window")
+	}
+
+	if _, err := svc.Sync(context.Background(), "CO2003-L01", "admin"); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	// UpdateCourseLink called with the CURRENT link and blank legacy fields.
+	if len(cr.linkIds) != 1 || cr.linkIds[0] != "CO2003-L01" {
+		t.Fatalf("want one UpdateCourseLink(CO2003-L01), got %v", cr.linkIds)
+	}
+	if cr.links["CO2003-L01"] != "https://x.co/m.csv" {
+		t.Fatalf("UpdateCourseLink must re-save the current link, got %q", cr.links["CO2003-L01"])
+	}
+	if cr.linkUsers[0] != 0 || cr.linkNames[0] != "" {
+		t.Fatalf("legacy by_id/by_user must be blank, got %d/%q", cr.linkUsers[0], cr.linkNames[0])
+	}
+
+	// Ordering: set active, then touch, then fetch.
+	wantStatus, wantLink, wantFetch := "status:CO2003-L01:active", "link:CO2003-L01", "fetch:CO2003-L01"
+	iStatus, iLink, iFetch := slices.Index(order.calls, wantStatus), slices.Index(order.calls, wantLink), slices.Index(order.calls, wantFetch)
+	if iStatus < 0 || iLink < 0 || iFetch < 0 || !(iStatus < iLink && iLink < iFetch) {
+		t.Fatalf("want status → link touch → fetch, order=%v", order.calls)
+	}
+
+	// The marksync gate now sees the course again.
+	syncable, _ = cr.FindSyncableCourses(since)
+	if len(syncable) != 1 || syncable[0].Id != "CO2003-L01" {
+		t.Fatalf("post-Sync FindSyncableCourses = %v, want CO2003-L01 back in window", syncable)
 	}
 }
 

@@ -18,6 +18,10 @@ type teacherCourseRepo struct {
 	statusIds   []string
 	statusOn    []course.Status
 	recordCntOn []string
+	linkIds     []string // UpdateCourseLink courseId args (/sync updated_at touch)
+	links       []string // UpdateCourseLink link args
+	linkUsers   []int64  // UpdateCourseLink legacy by_id args
+	linkNames   []string // UpdateCourseLink legacy by_user args
 }
 
 func (f *teacherCourseRepo) FindCoursesUpdatedAfter(time.Time) ([]course.Model, error) {
@@ -36,7 +40,13 @@ func (f *teacherCourseRepo) FindCourseById(courseId string) (course.Model, error
 	}
 	return course.Model{}, course.ErrNotFound
 }
-func (f *teacherCourseRepo) UpdateCourseLink(string, string, int64, string) error { return nil }
+func (f *teacherCourseRepo) UpdateCourseLink(courseId, link string, userId int64, username string) error {
+	f.linkIds = append(f.linkIds, courseId)
+	f.links = append(f.links, link)
+	f.linkUsers = append(f.linkUsers, userId)
+	f.linkNames = append(f.linkNames, username)
+	return nil
+}
 func (f *teacherCourseRepo) RemoveCourse(string) error                            { return nil }
 func (f *teacherCourseRepo) SetCourseStatus(courseId string, status course.Status) error {
 	f.statusIds = append(f.statusIds, courseId)
@@ -100,6 +110,36 @@ func TestSyncCourse_ReenablesAndFetches(t *testing.T) {
 	}
 	if len(c.sent) != 1 || !contains("synced 1 records", c.sent[0]) {
 		t.Fatalf("want reply with record count, got %v", c.sent)
+	}
+}
+
+// Issue #43 (review pass 2 F3): FindSyncableCourses gates on updated_at >
+// now-9 months while SetCourseStatus never touches updated_at. /sync on a
+// course revived after >9 months must re-write the stored link (blank legacy
+// by_id/by_user, same convention as /create) so updated_at refreshes and the
+// poller window reopens.
+func TestSyncCourse_TouchesUpdatedAt(t *testing.T) {
+	cr := &teacherCourseRepo{courses: map[string]course.Model{
+		"CO2003-L01": {Id: "CO2003-L01", Link: "https://x.co/m.csv", Status: course.StatusInactive,
+			UpdatedAt: time.Now().AddDate(-1, 0, 0).Unix()},
+	}}
+	dl := &fakeFeedDownloader{records: [][]string{{"id"}, {"name"}, {"s1", "Alice"}}}
+	h := newSyncTeacher(cr, dl)
+
+	if err := h.SyncCourse(syncCtx("CO2003-L01")); err != nil {
+		t.Fatalf("SyncCourse: %v", err)
+	}
+	if len(cr.linkIds) != 1 || cr.linkIds[0] != "CO2003-L01" {
+		t.Fatalf("want one UpdateCourseLink(CO2003-L01), got %v", cr.linkIds)
+	}
+	if cr.links[0] != "https://x.co/m.csv" {
+		t.Fatalf("UpdateCourseLink must re-save the stored link, got %q", cr.links[0])
+	}
+	if cr.linkUsers[0] != 0 || cr.linkNames[0] != "" {
+		t.Fatalf("legacy by_id/by_user must be blank, got %d/%q", cr.linkUsers[0], cr.linkNames[0])
+	}
+	if len(cr.statusOn) != 1 || cr.statusOn[0] != course.StatusActive {
+		t.Fatalf("status must still flip active, got %v", cr.statusOn)
 	}
 }
 

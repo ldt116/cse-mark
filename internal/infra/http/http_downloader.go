@@ -21,7 +21,9 @@ type SimpleDownloader struct {
 // markimport consumes; guard the wider interface at compile time.
 var _ downloader.AuthorizedRepository = (*SimpleDownloader)(nil)
 
-func NewSimpleDownloader(config *configs.Config) downloader.Repository {
+// NewSimpleDownloader returns the concrete type so wire can bind it to both
+// downloader.Repository and downloader.AuthorizedRepository via wire.Bind.
+func NewSimpleDownloader(config *configs.Config) *SimpleDownloader {
 	return &SimpleDownloader{
 		Client: &http.Client{
 			Timeout: config.DownloaderTimeout,

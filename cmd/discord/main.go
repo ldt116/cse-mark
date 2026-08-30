@@ -7,7 +7,6 @@ import (
 	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/delivery/discord"
 	"thuanle/cse-mark/internal/domain/course"
-	"thuanle/cse-mark/internal/domain/downloader"
 	emailinfra "thuanle/cse-mark/internal/infra/email"
 	"thuanle/cse-mark/internal/infra"
 	infraDiscord "thuanle/cse-mark/internal/infra/discord"
@@ -61,7 +60,7 @@ func main() {
 
 	// Use cases.
 	rules := course.NewRules(cfg)
-	importService := markimport.NewService(downloaderRepo.(downloader.AuthorizedRepository), courseRepo, markRepo, cfg.GvProxyToken)
+	importService := markimport.NewService(downloaderRepo, courseRepo, markRepo, cfg.GvProxyToken)
 	courseAdmin := courseadmin.NewService(courseRepo, mappingRepo, importService, holder.Bot, rules)
 	ident := identity.NewService(studentRepo, verificationRepo, bindingRepo, sender, cfg)
 

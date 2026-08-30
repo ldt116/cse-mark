@@ -106,6 +106,12 @@ func LoadConfig() *Config {
 	}
 }
 
+// ProvideGvProxyToken adapts the config field into a wire provider for the
+// plain-string gvProxyToken parameter of markimport.NewService.
+func ProvideGvProxyToken(config *Config) string {
+	return config.GvProxyToken
+}
+
 func loadEnvInt(key string, defaultValue int) int {
 	val := os.Getenv(key)
 	if val == "" {

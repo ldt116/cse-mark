@@ -6,6 +6,7 @@ import (
 	"github.com/google/wire"
 	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/domain/course"
+	"thuanle/cse-mark/internal/domain/downloader"
 	"thuanle/cse-mark/internal/infra/http"
 	"thuanle/cse-mark/internal/infra/mongo"
 	"thuanle/cse-mark/internal/usecases/coursequery"
@@ -29,6 +30,7 @@ func InitializeApp() (*App, error) {
 	wire.Build(
 		//configurations
 		configs.LoadConfig,
+		configs.ProvideGvProxyToken,
 
 		//infrastructures
 		mongo.NewClient,
@@ -36,6 +38,8 @@ func InitializeApp() (*App, error) {
 		mongo.NewMarkRepo,
 		mongo.NewStudentRepo,
 		http.NewSimpleDownloader,
+		wire.Bind(new(downloader.Repository), new(*http.SimpleDownloader)),
+		wire.Bind(new(downloader.AuthorizedRepository), new(*http.SimpleDownloader)),
 
 		//domain repositories and rules
 		course.NewRules,

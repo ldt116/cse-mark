@@ -151,6 +151,14 @@ func (s *Service) Sync(ctx context.Context, courseId, actor string) (int, error)
 	if err := s.courseRepo.SetCourseStatus(courseId, course.StatusActive); err != nil {
 		return 0, err
 	}
+	// SetCourseStatus must not touch updated_at, but FindSyncableCourses gates
+	// on updated_at > now-9 months — a course revived after >9 months would be
+	// fetched inline once and then dropped by the poller. Re-write the current
+	// link (blank legacy by_id/by_user, same convention as Create) to refresh
+	// updated_at and reopen the window.
+	if err := s.courseRepo.UpdateCourseLink(courseId, c.Link, 0, ""); err != nil {
+		return 0, err
+	}
 	imported, err := s.imports.FetchMarkLinkIntoCourse(courseId, c.Link)
 	if err != nil {
 		return 0, err

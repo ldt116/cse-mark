@@ -117,6 +117,8 @@ Lỗi download (phiên bản `*downloader.FeedError{Status, Code}`) được `cl
 
 > `/sync` chạy ở tiến trình bot — không reset backoff in-memory của fetcher; môn đang trong slow-poll window (≤1h) được fetch lại chậm nhất ở cuối window, success tự heal.
 
+> Hiếm: admin `/create` link mới trong khi fetcher còn đang fetch link cũ in-flight — phản hồi 410 cũ về sau có thể đánh inactive nhầm; `/sync` kích hoạt lại. Cửa sổ vài giây, chấp nhận.
+
 ## 5. Role sync (discord service)
 
 ```text

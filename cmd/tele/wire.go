@@ -10,7 +10,7 @@ import (
 	"thuanle/cse-mark/internal/delivery/tele/middlewares"
 	"thuanle/cse-mark/internal/delivery/tele/views"
 	"thuanle/cse-mark/internal/domain/course"
-	emailport "thuanle/cse-mark/internal/domain/email"
+	"thuanle/cse-mark/internal/domain/downloader"
 	"thuanle/cse-mark/internal/infra/http"
 	"thuanle/cse-mark/internal/infra/mongo"
 	"thuanle/cse-mark/internal/usecases/iam"
@@ -28,6 +28,7 @@ func InitializeApp() (*App, error) {
 	wire.Build(
 		//configurations
 		configs.LoadConfig,
+		configs.ProvideGvProxyToken,
 
 		//infrastructures
 		mongo.NewClient,
@@ -38,6 +39,7 @@ func InitializeApp() (*App, error) {
 		mongo.NewBindingRepo,
 		mongo.NewVerificationRepo,
 		http.NewSimpleDownloader,
+		wire.Bind(new(downloader.AuthorizedRepository), new(*http.SimpleDownloader)),
 
 		//domain repositories and rules
 		course.NewRules,
@@ -53,7 +55,7 @@ func InitializeApp() (*App, error) {
 
 		//delivery
 		ProvideGuestHandler,
-		handlers.NewBindHandler,
+		ProvideBindHandler, // NewBindHandler takes unexported identityAPI — see providers.go
 		handlers.NewTeacherHandler,
 		handlers.NewAdminHandler,
 		middlewares.NewTeacherOnly,
