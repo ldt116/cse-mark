@@ -13,6 +13,7 @@ import (
 	"thuanle/cse-mark/internal/delivery/tele/middlewares"
 	"thuanle/cse-mark/internal/delivery/tele/views"
 	"thuanle/cse-mark/internal/domain/course"
+	"thuanle/cse-mark/internal/domain/downloader"
 	"thuanle/cse-mark/internal/infra/email"
 	"thuanle/cse-mark/internal/infra/http"
 	"thuanle/cse-mark/internal/infra/mongo"
@@ -47,7 +48,9 @@ func InitializeApp() (*App, error) {
 	userRepository := mongo.NewUserRepo(client, config)
 	authzService := iam.NewAuthzService(courseRepository, userRepository)
 	downloaderRepository := http.NewSimpleDownloader(config)
-	service := markimport.NewService(downloaderRepository, courseRepository, repository)
+	// *SimpleDownloader implements both downloader.Repository and
+	// downloader.AuthorizedRepository; assert the wider interface for markimport.
+	service := markimport.NewService(downloaderRepository.(downloader.AuthorizedRepository), courseRepository, repository, config.GvProxyToken)
 	teacher := handlers.NewTeacherHandler(courseRepository, rules, teacherRenderer, authzService, repository, service)
 	admin := handlers.NewAdminHandler(userRepository)
 	teacherOnly := middlewares.NewTeacherOnly(authzService)

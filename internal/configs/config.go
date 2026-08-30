@@ -51,6 +51,10 @@ type Config struct {
 	RosterCsvUrl       string
 	RosterSyncInterval time.Duration
 	RoleSyncInterval   time.Duration
+
+	// GvProxyToken is the bearer token for mark feeds served by the hcmut-util
+	// gv proxy (GV_PROXY_TOKEN). Empty = public feeds, no Authorization header.
+	GvProxyToken string
 }
 
 func LoadConfig() *Config {
@@ -98,6 +102,7 @@ func LoadConfig() *Config {
 		RosterCsvUrl:       loadEnv("ROSTER_CSV_URL", ""),
 		RosterSyncInterval: loadEnvDuration("ROSTER_SYNC_INTERVAL", 24*time.Hour),
 		RoleSyncInterval:   loadEnvDuration("ROLE_SYNC_INTERVAL", 30*time.Minute),
+		GvProxyToken:       loadEnv("GV_PROXY_TOKEN", ""),
 	}
 }
 

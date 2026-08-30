@@ -13,6 +13,7 @@ var v2EnvKeys = []string{
 	"SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_PORT",
 	"OTP_LEN", "OTP_TTL", "OTP_MAX_ATTEMPTS",
 	"ROSTER_CSV_URL", "ROSTER_SYNC_INTERVAL", "ROLE_SYNC_INTERVAL",
+	"GV_PROXY_TOKEN",
 }
 
 func TestLoadConfig_V2Defaults(t *testing.T) {
@@ -60,6 +61,7 @@ func TestLoadConfig_V2Defaults(t *testing.T) {
 
 	// Sync defaults.
 	assertEqual(t, "RosterCsvUrl", cfg.RosterCsvUrl, "")
+	assertEqual(t, "GvProxyToken", cfg.GvProxyToken, "")
 	if cfg.RosterSyncInterval != 24*time.Hour {
 		t.Errorf("RosterSyncInterval: want 24h, got %v", cfg.RosterSyncInterval)
 	}
@@ -87,6 +89,7 @@ func TestLoadConfig_V2FromEnv(t *testing.T) {
 	t.Setenv("ROSTER_CSV_URL", "https://example.com/r.csv")
 	t.Setenv("ROSTER_SYNC_INTERVAL", "12h")
 	t.Setenv("ROLE_SYNC_INTERVAL", "15m")
+	t.Setenv("GV_PROXY_TOKEN", "gv-tok")
 
 	cfg := LoadConfig()
 
@@ -116,6 +119,7 @@ func TestLoadConfig_V2FromEnv(t *testing.T) {
 		t.Errorf("OtpMaxAttempts: want 7, got %d", cfg.OtpMaxAttempts)
 	}
 	assertEqual(t, "RosterCsvUrl", cfg.RosterCsvUrl, "https://example.com/r.csv")
+	assertEqual(t, "GvProxyToken", cfg.GvProxyToken, "gv-tok")
 	if cfg.RosterSyncInterval != 12*time.Hour {
 		t.Errorf("RosterSyncInterval: want 12h, got %v", cfg.RosterSyncInterval)
 	}

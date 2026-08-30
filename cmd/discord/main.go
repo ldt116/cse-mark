@@ -7,6 +7,7 @@ import (
 	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/delivery/discord"
 	"thuanle/cse-mark/internal/domain/course"
+	"thuanle/cse-mark/internal/domain/downloader"
 	emailinfra "thuanle/cse-mark/internal/infra/email"
 	"thuanle/cse-mark/internal/infra"
 	infraDiscord "thuanle/cse-mark/internal/infra/discord"
@@ -47,7 +48,9 @@ func main() {
 	verificationRepo := mongo.NewVerificationRepo(mongoClient, cfg)
 
 	// Infra: HTTP downloader, email sender (OTP), Discord bot/session.
-	downloader := http.NewSimpleDownloader(cfg)
+	// Named downloaderRepo so it does not shadow the downloader domain package;
+	// *SimpleDownloader implements both Repository and AuthorizedRepository.
+	downloaderRepo := http.NewSimpleDownloader(cfg)
 	sender := emailinfra.NewSenderFromConfig(cfg) // SMTP if configured, fail-closed otherwise; OTP_SENDER=log for dev
 	holder, err := infraDiscord.NewSessionHolder(cfg)
 	if err != nil {
@@ -58,7 +61,7 @@ func main() {
 
 	// Use cases.
 	rules := course.NewRules(cfg)
-	importService := markimport.NewService(downloader, courseRepo, markRepo)
+	importService := markimport.NewService(downloaderRepo.(downloader.AuthorizedRepository), courseRepo, markRepo, cfg.GvProxyToken)
 	courseAdmin := courseadmin.NewService(courseRepo, mappingRepo, importService, holder.Bot, rules)
 	ident := identity.NewService(studentRepo, verificationRepo, bindingRepo, sender, cfg)
 

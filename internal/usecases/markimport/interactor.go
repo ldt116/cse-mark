@@ -12,16 +12,19 @@ type Service struct {
 	courseRepo course.Repository
 	markRepo   mark.Repository
 
-	downloader downloader.Repository
+	downloader   downloader.AuthorizedRepository
+	gvProxyToken string
 }
 
-func NewService(downloader downloader.Repository,
-	courseRepo course.Repository, markRepo mark.Repository) *Service {
+func NewService(downloader downloader.AuthorizedRepository,
+	courseRepo course.Repository, markRepo mark.Repository,
+	gvProxyToken string) *Service {
 	return &Service{
 		courseRepo: courseRepo,
 		markRepo:   markRepo,
 
-		downloader: downloader,
+		downloader:   downloader,
+		gvProxyToken: gvProxyToken,
 	}
 }
 
@@ -66,21 +69,24 @@ func (s *Service) FetchMarkLinkIntoCourse(courseId string, link string) (int, er
 		Str("link", link).
 		Msg("Fetching new marks")
 
-	records, err := s.downloader.DownloadCSV(link)
+	records, err := s.downloader.DownloadCSVAuthorized(link, s.gvProxyToken)
 	if err != nil {
 		return 0, err
 	}
-
-	log.Debug().
-		Str("courseId", courseId).
-		Strs("Flags", records[0]).
-		Strs("Headers", records[1]).
-		Msg("Record fetched")
 
 	cleanedRecords, err := s.CleanRawCsvRecords(records)
 	if err != nil {
 		return 0, err
 	}
+
+	// Log raw flags/headers only after CleanRawCsvRecords has validated the
+	// structure (>= 2 rows): indexing records[1] on a malformed feed would
+	// panic before the parse error is returned.
+	log.Debug().
+		Str("courseId", courseId).
+		Strs("Flags", records[0]).
+		Strs("Headers", records[1]).
+		Msg("Record fetched")
 
 	log.Debug().Interface("cleanData", cleanedRecords).Msg("Cleaned data")
 
