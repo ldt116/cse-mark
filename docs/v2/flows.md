@@ -113,7 +113,7 @@ Lỗi download (phiên bản `*downloader.FeedError{Status, Code}`) được `cl
 - `active` — mặc định; course cũ chưa có field `status` vẫn coi là active.
 - `stale` — permanent fail (403/404): vẫn trong danh sách poll nhưng bị hạ nhịp còn 1h/lần; probe thành công → auto-heal về `active`.
 - `inactive` — grant revoked (410): bị loại khỏi danh sách poll hẳn (`FindSyncableCourses` lọc `status ≠ inactive`); marks đóng băng vẫn đọc được qua bot.
-- `/sync <courseId>` (Discord + Telegram, admin — xem §7) kích hoạt lại môn stale/inactive: set `active` **trước** khi fetch lại ngay.
+- `/sync <courseId>` (Discord + Telegram, admin — xem §7) kích hoạt lại môn stale/inactive: set `active` **trước** khi fetch lại ngay (đồng thời ghi lại `updated_at`, mở lại cửa sổ poll 9 tháng cho môn revive lâu ngày).
 
 > `/sync` chạy ở tiến trình bot — không reset backoff in-memory của fetcher; môn đang trong slow-poll window (≤1h) được fetch lại chậm nhất ở cuối window, success tự heal.
 

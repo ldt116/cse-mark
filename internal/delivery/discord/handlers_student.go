@@ -222,7 +222,7 @@ func formatProfile(stu student.Model, classes []string) string {
 // enrolledClasses returns course ids in which the MSSV has a mark record
 // (no course-status filter — a frozen inactive course still counts as taken).
 func (s *Service) enrolledClasses(mssv string) []string {
-	// We only know courses via the course repo; cross-check each active course's
+	// We only know courses via the course repo; cross-check each course's
 	// mark collection for the MSSV. For large course sets this is N lookups; an
 	// enrollment index would be better, but the mark cache is the source of truth
 	// (SRS §13 Enrollment) and course counts are modest for a department LMS.

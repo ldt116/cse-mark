@@ -16,7 +16,7 @@ type fakeCtx struct {
 
 func (f *fakeCtx) Sender() *telebot.User { return f.sender }
 
-// Issue #45 F1: telebot v3 upstream middleware.Whitelist derefs
+// PR #45 review (issue #43) F1: telebot v3 upstream middleware.Whitelist derefs
 // c.Sender().ID without a nil check (restrict.go). An anonymous group admin
 // sends updates with only sender_chat (no `from`), so Sender() is nil and the
 // upstream middleware panics — telebot v3 does not recover, crashing the whole
