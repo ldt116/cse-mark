@@ -98,6 +98,25 @@ func mustGenerateKey(t *testing.T) (string, ed25519.PublicKey) {
 // under test from TTL expiry.
 const longTTL = time.Minute
 
+// backdateThrottle moves the last fetch attempt outside the throttle window
+// so that a fetch SigningKey wants to perform is actually attempted. The
+// cache timestamp (fetchedAt) is untouched: the cache stays fresh.
+func backdateThrottle(c *JwksClient) {
+	c.mu.Lock()
+	c.lastFetchAttempt = time.Now().Add(-time.Hour)
+	c.mu.Unlock()
+}
+
+// expireCache backdates both the cache timestamp (past the TTL — the expiry
+// under test) and the throttle timestamp (past the fetch window), simulating
+// the passage of time without sleeping.
+func expireCache(c *JwksClient) {
+	c.mu.Lock()
+	c.fetchedAt = time.Now().Add(-time.Hour)
+	c.lastFetchAttempt = c.fetchedAt
+	c.mu.Unlock()
+}
+
 func TestSigningKey_FirstFetchCaches(t *testing.T) {
 	kidA, pubA := mustGenerateKey(t)
 	stub, srv := newJwksStub(t)
@@ -132,7 +151,8 @@ func TestSigningKey_TTLExpiryRefetches(t *testing.T) {
 	if _, err := client.SigningKey(kidA); err != nil {
 		t.Fatalf("SigningKey before expiry: %v", err)
 	}
-	time.Sleep(60 * time.Millisecond)
+	// Simulate TTL expiry (and the throttle window passing) without a sleep.
+	expireCache(client)
 	got, err := client.SigningKey(kidA)
 	if err != nil {
 		t.Fatalf("SigningKey after expiry: %v", err)
@@ -163,6 +183,9 @@ func TestSigningKey_UnknownKidTriggersRefresh(t *testing.T) {
 
 	// Rotation: kid B appears server-side while the cache is still fresh.
 	stub.setKeys(map[string]ed25519.PublicKey{kidA: pubA, kidB: pubB})
+	// The rotation refresh would be throttled right after the first fetch:
+	// move the attempt outside the window, keeping the cache fresh.
+	backdateThrottle(client)
 
 	got, err := client.SigningKey(kidB)
 	if err != nil {
@@ -187,6 +210,8 @@ func TestSigningKey_UnknownKidAfterRefresh(t *testing.T) {
 	if _, err := client.SigningKey(kidA); err != nil {
 		t.Fatalf("SigningKey(kidA): %v", err)
 	}
+	// Outside the throttle window so the rotation refresh is attempted.
+	backdateThrottle(client)
 
 	_, err := client.SigningKey("kid-never-exists")
 	if !errors.Is(err, jwks.ErrUnknownKid) {
@@ -209,6 +234,8 @@ func TestSigningKey_ServerErrorUnavailable(t *testing.T) {
 	}
 
 	stub.setFail(true)
+	// Outside the throttle window so the failing refresh is attempted.
+	backdateThrottle(client)
 
 	_, err := client.SigningKey("kid-missing")
 	if !errors.Is(err, jwks.ErrUnavailable) {
@@ -322,7 +349,8 @@ func TestSigningKey_EmptyKeysetRecoversAfterTtl(t *testing.T) {
 		t.Fatalf("SigningKey on empty key set: %v, want ErrUnknownKid", err)
 	}
 
-	time.Sleep(60 * time.Millisecond)
+	// Simulate TTL expiry (and the throttle window passing) without a sleep.
+	expireCache(client)
 
 	// The endpoint recovers with a real key.
 	stub.setKeys(map[string]ed25519.PublicKey{"kid-a": pubA})
@@ -335,5 +363,77 @@ func TestSigningKey_EmptyKeysetRecoversAfterTtl(t *testing.T) {
 	}
 	if n := stub.requests(); n != 2 {
 		t.Fatalf("expected 2 requests (initial empty fetch + refetch after TTL), got %d", n)
+	}
+}
+
+// TestSigningKey_UnknownKidThrottledRefetch pins the fetch throttle against
+// kid spam (#44 review N1): while the cache is fresh, unknown kids trigger at
+// most one fetch per fetchMinInterval — a second unknown-kid call inside the
+// window returns ErrUnknownKid without another outbound request, instead of
+// amplifying one request per /marks call.
+func TestSigningKey_UnknownKidThrottledRefetch(t *testing.T) {
+	kidA, pubA := mustGenerateKey(t)
+	stub, srv := newJwksStub(t)
+	stub.setKeys(map[string]ed25519.PublicKey{kidA: pubA})
+
+	client := NewJwksClient(srv.URL, 2*time.Second, longTTL)
+
+	_, err := client.SigningKey("kid-stranger-1")
+	if !errors.Is(err, jwks.ErrUnknownKid) {
+		t.Fatalf("first unknown kid: %v, want ErrUnknownKid", err)
+	}
+	if n := stub.requests(); n != 1 {
+		t.Fatalf("first unknown kid must fetch exactly once, got %d requests", n)
+	}
+
+	_, err = client.SigningKey("kid-stranger-2")
+	if !errors.Is(err, jwks.ErrUnknownKid) {
+		t.Fatalf("second unknown kid: %v, want ErrUnknownKid", err)
+	}
+	if n := stub.requests(); n != 1 {
+		t.Fatalf("second unknown kid within the throttle window must not fetch: expected 1 request, got %d", n)
+	}
+}
+
+// TestSigningKey_FailedFetchThrottled pins the other half of the throttle: a
+// failed fetch (endpoint down, here HTTP 500) counts as an attempt too — the
+// immediately following request on a serveless cache gets ErrUnavailable
+// without a new outbound request (no back-to-back 15s stalls under the
+// mutex); once the window passes the fetch is retried.
+func TestSigningKey_FailedFetchThrottled(t *testing.T) {
+	kidA, pubA := mustGenerateKey(t)
+	stub, srv := newJwksStub(t)
+	stub.setFail(true)
+
+	client := NewJwksClient(srv.URL, 2*time.Second, longTTL)
+
+	// Cache has never been populated: the request cannot be served at all.
+	if _, err := client.SigningKey(kidA); !errors.Is(err, jwks.ErrUnavailable) {
+		t.Fatalf("first call on failing endpoint: %v, want ErrUnavailable", err)
+	}
+	if n := stub.requests(); n != 1 {
+		t.Fatalf("first call must attempt one fetch, got %d requests", n)
+	}
+
+	if _, err := client.SigningKey(kidA); !errors.Is(err, jwks.ErrUnavailable) {
+		t.Fatalf("immediate retry: %v, want ErrUnavailable", err)
+	}
+	if n := stub.requests(); n != 1 {
+		t.Fatalf("immediate retry must be throttled: expected 1 request, got %d", n)
+	}
+
+	// Window passed (backdated): the fetch is retried and now succeeds.
+	stub.setFail(false)
+	stub.setKeys(map[string]ed25519.PublicKey{kidA: pubA})
+	backdateThrottle(client)
+	got, err := client.SigningKey(kidA)
+	if err != nil {
+		t.Fatalf("SigningKey after throttle window: %v, want nil", err)
+	}
+	if !bytes.Equal(got, pubA) {
+		t.Fatalf("wrong key after retry: got %x, want %x", got, pubA)
+	}
+	if n := stub.requests(); n != 2 {
+		t.Fatalf("retry after window must fetch again: expected 2 requests, got %d", n)
 	}
 }

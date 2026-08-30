@@ -10,6 +10,7 @@ import (
 	"thuanle/cse-mark/internal/delivery/api"
 	"thuanle/cse-mark/internal/delivery/api/handlers"
 	"thuanle/cse-mark/internal/delivery/api/middlewares"
+	"thuanle/cse-mark/internal/domain/course"
 	"thuanle/cse-mark/internal/domain/jwks"
 	"thuanle/cse-mark/internal/infra/http"
 	"thuanle/cse-mark/internal/infra/mongo"
@@ -67,7 +68,7 @@ func InitializeApp() (*App, error) {
 		//http.NewSimpleDownloader,
 		//
 		////domain repositories and rules
-		//course.NewRules,
+		course.NewRules,
 		//
 		////usecases
 		//markimport.NewService,

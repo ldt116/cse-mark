@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 
+	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/domain/course"
 	"thuanle/cse-mark/internal/domain/jwks"
 	"thuanle/cse-mark/internal/domain/mark"
@@ -67,15 +68,18 @@ func (f *fakeCourseRepo) UpdateCourseLink(string, string, int64, string) error {
 func (f *fakeCourseRepo) RemoveCourse(string) error                           { return nil }
 
 // fakeMarkRepo satisfies the full mark.Repository interface, records the last
-// (courseId, studentId) pair it was asked for, and can fail on demand.
+// (courseId, studentId) pair it was asked for, counts GetMark calls, and can
+// fail on demand.
 type fakeMarkRepo struct {
 	marks        map[string]string // "courseId\x00studentId" -> JSON string
 	err          error
 	lastCourseId string
 	lastStudent  string
+	getMarkCalls int
 }
 
 func (f *fakeMarkRepo) GetMark(courseId string, studentId string) (string, error) {
+	f.getMarkCalls++
 	f.lastCourseId = courseId
 	f.lastStudent = studentId
 	if f.err != nil {
@@ -124,6 +128,9 @@ func mintTestToken(t *testing.T, priv ed25519.PrivateKey, kid, issuer, subject s
 	return signed
 }
 
+// marksRules mirrors the production wiring of the marksquery service.
+func marksRules() *course.Rules { return course.NewRules(&configs.Config{}) }
+
 // newMarksEnv wires a real engine with the route registered exactly like
 // service.go does: JWT middleware + StudentMarks.GetAll over the real
 // assertion and marksquery services on fake repositories.
@@ -134,7 +141,7 @@ func newMarksEnv(t *testing.T, courseRepo *fakeCourseRepo, markRepo *fakeMarkRep
 	priv, pub := newTestKeyPair(t)
 	repo := &fakeJwks{keys: map[string]ed25519.PublicKey{"key-a": pub}}
 	jwtMw := middlewares.NewJwtMiddleware(assertion.NewService(repo, testIssuer, testAudience))
-	studentMarks := NewStudentMarksHandler(marksquery.NewService(courseRepo, markRepo))
+	studentMarks := NewStudentMarksHandler(marksquery.NewService(courseRepo, markRepo, marksRules()))
 
 	engine := gin.New()
 	engine.GET("/marks", jwtMw.Handle, studentMarks.GetAll)
@@ -272,6 +279,33 @@ func TestStudentMarksGetAll_UnknownCourseFilter(t *testing.T) {
 	}
 	if courseRepo.findCalled {
 		t.Error("FindCoursesUpdatedAfter called for a course_id query, want the single-course branch only")
+	}
+}
+
+// TestStudentMarksGetAll_InvalidCourseFilter pins #44 review N4 end to end:
+// a malformed course_id must answer 200 [] (same as no data, Ruling 5) without
+// reaching the mark repo at all — in production GetMark feeds
+// db.Collection(courseId), which a malformed name would fail on with a 500.
+func TestStudentMarksGetAll_InvalidCourseFilter(t *testing.T) {
+	for _, query := range []string{"?course_id=a%20b", "?course_id=x%24y"} {
+		courseRepo := &fakeCourseRepo{courses: []course.Model{{Id: "c1"}}}
+		markRepo := &fakeMarkRepo{marks: map[string]string{}}
+		engine, mint := newMarksEnv(t, courseRepo, markRepo)
+
+		w := serveMarks(engine, mint("2111111"), query)
+
+		if w.Code != 200 {
+			t.Fatalf("%s: status = %d, want 200", query, w.Code)
+		}
+		if strings.TrimSpace(w.Body.String()) != "[]" {
+			t.Errorf("%s: body = %s, want []", query, w.Body.String())
+		}
+		if markRepo.getMarkCalls != 0 {
+			t.Errorf("%s: GetMark called %d times, want 0 (malformed course_id must not reach Mongo)", query, markRepo.getMarkCalls)
+		}
+		if courseRepo.findCalled {
+			t.Errorf("%s: FindCoursesUpdatedAfter was called, want not called", query)
+		}
 	}
 }
 

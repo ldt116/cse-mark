@@ -53,7 +53,10 @@ CMD ["./discordbot"]
     network_mode: host
 ```
 
-`fetcher` và `tele` giữ nguyên (chỉ code nội tại thay đổi). `api` giữ nguyên.
+`fetcher` và `tele` giữ nguyên (chỉ code nội tại thay đổi). `api` có thêm từ #44: endpoint
+`GET /marks` (JWT của student app, verify qua JWKS) và 3 env mới `AUTH_JWKS_URL` /
+`AUTH_JWT_ISSUER` / `AUTH_JWT_AUDIENCE` — default trỏ student app `student.thuanle.me` /
+audience `cse-mark`, chỉ cần khai báo khi khác default (xem `config-env.md` §6).
 
 ## 3. CI — thêm image thứ 4 (đã làm)
 
@@ -127,6 +130,9 @@ Code-side đã hoàn tất (stack PR M1–M8); phần còn lại là ops/secret/
 - [ ] Admin `/create <courseId> <csvUrl>` → role + channel tạo theo tên, `discord_mappings` lưu đúng id.
 - [ ] Role-sync scheduler gán role cho SV enrolled (log "role-sync: course reconciled" added=N).
 - [ ] Telegram `/bind` + `/mark <courseId>` (bound) hoạt động; `/create` (= `/load` cũ) OK.
+- [ ] Canary `/marks` (#44): curl không token → 401 `jwt_invalid`; token test lệch `exp` → 401 `jwt_expired`.
+- [ ] Từ container api, JWKS student app reachable và kid/iss/aud khớp cấu hình `AUTH_*` (pairing hcmut-util #151); JWKS down → 503 `jwks_unavailable` (fetch bị throttle 30s giữa 2 lần thử).
+- [ ] Giai đoạn chuyển tiếp: token hợp lệ nhưng `sub` chưa phải MSSV → 200 `[]` là ĐÚNG (chưa có điểm cho sub đó), không phải lỗi.
 
 **Cutover / vận hành**
 - [ ] Thông báo cho người dùng Telegram: `/mark` giờ cần `/bind` (giữ alias `/load` + fallback legacy `/mark <course> <studentId>` trong giai đoạn chuyển tiếp).

@@ -6,9 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"thuanle/cse-mark/internal/configs"
 	"thuanle/cse-mark/internal/domain/course"
 	"thuanle/cse-mark/internal/domain/mark"
 )
+
+// rules mirrors the production wiring: real course rules over an empty config.
+func rules() *course.Rules { return course.NewRules(&configs.Config{}) }
 
 // fakeCourseRepo satisfies the full course.Repository interface.
 type fakeCourseRepo struct {
@@ -36,13 +40,16 @@ func (f *fakeCourseRepo) FindCourseById(string) (course.Model, error) {
 func (f *fakeCourseRepo) UpdateCourseLink(string, string, int64, string) error { return nil }
 func (f *fakeCourseRepo) RemoveCourse(string) error                           { return nil }
 
-// fakeMarkRepo satisfies the full mark.Repository interface.
+// fakeMarkRepo satisfies the full mark.Repository interface and counts
+// GetMark calls.
 type fakeMarkRepo struct {
-	marks map[string]string // "courseId\x00studentId" -> JSON string
-	err   error
+	marks        map[string]string // "courseId\x00studentId" -> JSON string
+	err          error
+	getMarkCalls int
 }
 
 func (f *fakeMarkRepo) GetMark(courseId string, studentId string) (string, error) {
+	f.getMarkCalls++
 	if f.err != nil {
 		return "", f.err
 	}
@@ -85,7 +92,7 @@ func newAllCoursesFakes() (*fakeCourseRepo, *fakeMarkRepo) {
 
 func TestQuery_AllCourses(t *testing.T) {
 	courseRepo, markRepo := newAllCoursesFakes()
-	s := NewService(courseRepo, markRepo)
+	s := NewService(courseRepo, markRepo, rules())
 
 	got, err := s.Query(studentId, "")
 	if err != nil {
@@ -116,7 +123,7 @@ func TestQuery_AllCourses(t *testing.T) {
 
 func TestQuery_CourseFilter(t *testing.T) {
 	courseRepo, markRepo := newAllCoursesFakes()
-	s := NewService(courseRepo, markRepo)
+	s := NewService(courseRepo, markRepo, rules())
 
 	got, err := s.Query(studentId, "c1")
 	if err != nil {
@@ -138,7 +145,7 @@ func TestQuery_CourseFilter(t *testing.T) {
 
 func TestQuery_NoMarks(t *testing.T) {
 	courseRepo, markRepo := newAllCoursesFakes()
-	s := NewService(courseRepo, markRepo)
+	s := NewService(courseRepo, markRepo, rules())
 
 	got, err := s.Query("9999999", "")
 	if err != nil {
@@ -154,7 +161,7 @@ func TestQuery_NoMarks(t *testing.T) {
 
 func TestQuery_CourseFilterStudentMissing(t *testing.T) {
 	courseRepo, markRepo := newAllCoursesFakes()
-	s := NewService(courseRepo, markRepo)
+	s := NewService(courseRepo, markRepo, rules())
 
 	got, err := s.Query("9999999", "c1")
 	if err != nil {
@@ -168,6 +175,35 @@ func TestQuery_CourseFilterStudentMissing(t *testing.T) {
 	}
 }
 
+// TestQuery_CourseFilterInvalidCourseId pins #44 review N4: a malformed
+// courseId must be answered as "no data" (200 [], Ruling 5) without touching
+// the mark repo — GetMark feeds db.Collection(courseId), which a malformed
+// name would turn into a driver error and a 500, breaking the always-200
+// contract.
+func TestQuery_CourseFilterInvalidCourseId(t *testing.T) {
+	for _, courseId := range []string{"a b", "x$y", "1starts-with-digit", "sp ace", "sla/sh"} {
+		courseRepo, markRepo := newAllCoursesFakes()
+		s := NewService(courseRepo, markRepo, rules())
+
+		got, err := s.Query(studentId, courseId)
+		if err != nil {
+			t.Fatalf("Query(%q, %q) error = %v, want nil", studentId, courseId, err)
+		}
+		if got == nil {
+			t.Fatalf("Query(%q, %q) = nil, want non-nil empty slice", studentId, courseId)
+		}
+		if len(got) != 0 {
+			t.Fatalf("Query(%q, %q) len = %d, want 0", studentId, courseId, len(got))
+		}
+		if markRepo.getMarkCalls != 0 {
+			t.Errorf("Query(%q, %q): GetMark called %d times, want 0 (invalid courseId must not reach Mongo)", studentId, courseId, markRepo.getMarkCalls)
+		}
+		if courseRepo.findCalled {
+			t.Errorf("Query(%q, %q): FindCoursesUpdatedAfter was called, want not called", studentId, courseId)
+		}
+	}
+}
+
 // TestQuery_WireFormat locks the final JSON wire format (json tags, empty ->
 // [], verbatim marks without re-indentation), which the struct field
 // assertions above cannot catch. Note on HTML escaping: the fixture contains
@@ -176,7 +212,7 @@ func TestQuery_CourseFilterStudentMissing(t *testing.T) {
 // enabled), so the test locks the verbatim passthrough, not escaping behavior.
 func TestQuery_WireFormat(t *testing.T) {
 	courseRepo, markRepo := newAllCoursesFakes()
-	s := NewService(courseRepo, markRepo)
+	s := NewService(courseRepo, markRepo, rules())
 
 	got, err := s.Query(studentId, "")
 	if err != nil {
@@ -196,14 +232,14 @@ func TestQuery_WireFormat(t *testing.T) {
 func TestQuery_RepoError(t *testing.T) {
 	wantErr := errors.New("connection lost")
 	markRepo := &fakeMarkRepo{err: wantErr}
-	s := NewService(&fakeCourseRepo{}, markRepo)
+	s := NewService(&fakeCourseRepo{}, markRepo, rules())
 
 	if _, err := s.Query(studentId, "c1"); !errors.Is(err, wantErr) {
 		t.Fatalf("Query(%q, \"c1\") error = %v, want %v", studentId, err, wantErr)
 	}
 
 	courseRepo := &fakeCourseRepo{courses: []course.Model{{Id: "c1"}}, err: nil}
-	s2 := NewService(courseRepo, markRepo)
+	s2 := NewService(courseRepo, markRepo, rules())
 	if _, err := s2.Query(studentId, ""); !errors.Is(err, wantErr) {
 		t.Fatalf("Query(%q, \"\") error = %v, want %v", studentId, err, wantErr)
 	}

@@ -76,7 +76,9 @@ JWKS cache TTL `5m` và HTTP timeout `15s` là **const trong code** (`cmd/api/wi
 Kid lạ không có trong cache còn fresh → refresh JWKS đúng 1 lần rồi mới trả lỗi (hỗ trợ key rotation);
 ngoại lệ: cache fresh nhưng keyset rỗng → trả `ErrUnknownKid` ngay, chờ TTL hết mới fetch lại (chống
 hammer endpoint mỗi request). Refresh fail → `jwks.ErrUnavailable` (503 `jwks_unavailable`), bộ key đã
-cache giữ nguyên.
+cache giữ nguyên. Mọi lần thử fetch còn bị throttle: tối thiểu 30s giữa 2 lần thử (kể cả lần fail) —
+trong cửa sổ đó kid lạ trả `ErrUnknownKid` ngay, cache stale không serve được trả `jwks_unavailable`
+(chống dồn request khi endpoint down hoặc spam kid lạ).
 
 ## 7. Cấu trúc Config (Go)
 

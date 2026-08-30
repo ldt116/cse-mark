@@ -25,12 +25,14 @@ type CourseMarks struct {
 type Service struct {
 	courseRepo course.Repository
 	markRepo   mark.Repository
+	rules      *course.Rules
 }
 
-func NewService(courseRepo course.Repository, markRepo mark.Repository) *Service {
+func NewService(courseRepo course.Repository, markRepo mark.Repository, rules *course.Rules) *Service {
 	return &Service{
 		courseRepo: courseRepo,
 		markRepo:   markRepo,
+		rules:      rules,
 	}
 }
 
@@ -40,6 +42,13 @@ func NewService(courseRepo course.Repository, markRepo mark.Repository) *Service
 // non-nil empty slice, not nil.
 func (s *Service) Query(studentId, courseId string) ([]CourseMarks, error) {
 	if courseId != "" {
+		// A malformed courseId (same rule as the tele bot) is not distinguishable
+		// from "no data" (Ruling 5): answer 200 [] without touching Mongo, whose
+		// db.Collection(courseId) would otherwise fail on an invalid name and
+		// break the always-200 contract with a 500.
+		if !s.rules.IsValidCourseId(courseId) {
+			return []CourseMarks{}, nil
+		}
 		m, err := s.markRepo.GetMark(courseId, studentId)
 		if err != nil {
 			if errors.Is(err, mark.ErrNotFound) {

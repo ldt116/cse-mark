@@ -11,6 +11,7 @@ import (
 	"thuanle/cse-mark/internal/delivery/api"
 	"thuanle/cse-mark/internal/delivery/api/handlers"
 	"thuanle/cse-mark/internal/delivery/api/middlewares"
+	"thuanle/cse-mark/internal/domain/course"
 	"thuanle/cse-mark/internal/domain/jwks"
 	"thuanle/cse-mark/internal/infra/http"
 	"thuanle/cse-mark/internal/infra/mongo"
@@ -35,7 +36,8 @@ func InitializeApp() (*App, error) {
 	repository := mongo.NewMarkRepo(client, config)
 	marks := handlers.NewMarksHandler(repository)
 	courseRepository := mongo.NewCourseRepo(client, config)
-	marksqueryService := marksquery.NewService(courseRepository, repository)
+	rules := course.NewRules(config)
+	marksqueryService := marksquery.NewService(courseRepository, repository, rules)
 	studentMarks := handlers.NewStudentMarksHandler(marksqueryService)
 	health := handlers.NewHealthHandler()
 	apiService := api.NewApiService(auth, jwt, marks, studentMarks, health, config)
