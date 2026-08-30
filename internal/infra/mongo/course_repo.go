@@ -133,3 +133,42 @@ func (r *CourseRepo) RemoveCourse(courseId string) error {
 	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": courseId})
 	return err
 }
+
+func (r *CourseRepo) SetCourseStatus(courseId string, status course.Status) error {
+	update := bson.M{"$set": bson.M{"status": status}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
+	defer cancel()
+	_, err := r.collection.UpdateByID(ctx, courseId, update)
+	return err
+}
+
+func (r *CourseRepo) FindSyncableCourses(sinceTime time.Time) ([]course.Model, error) {
+	filter := bson.M{
+		"$and": []bson.M{
+			{"updated_at": bson.M{"$gt": sinceTime.Unix()}},
+			{"link": bson.M{"$ne": ""}},
+			// $ne matches docs where status is missing — legacy courses stay active.
+			{"status": bson.M{"$ne": string(course.StatusInactive)}},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
+	defer cancel()
+
+	cur, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	var courses []course.Model
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), r.timeout)
+	defer cancel2()
+	err = cur.All(ctx2, &courses)
+	if err != nil {
+		return nil, err
+	}
+
+	return courses, err
+}

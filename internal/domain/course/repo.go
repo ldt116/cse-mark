@@ -25,4 +25,12 @@ type Repository interface {
 
 	// RemoveCourse removes the course with the given ID.
 	RemoveCourse(courseId string) error
+
+	// SetCourseStatus updates only the course status; it must not touch
+	// updated_at (that field tracks provisioning activity).
+	SetCourseStatus(courseId string, status Status) error
+
+	// FindSyncableCourses returns courses the poller should consider:
+	// updated after since, with a link, and not inactive (missing status = active).
+	FindSyncableCourses(since time.Time) ([]Model, error)
 }

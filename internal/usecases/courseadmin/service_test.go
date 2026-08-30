@@ -42,6 +42,12 @@ func (f *fullFakeCourse) UpdateCourseLink(courseId, link string, _ int64, _ stri
 	return nil
 }
 func (f *fullFakeCourse) RemoveCourse(string) error { return nil }
+func (f *fullFakeCourse) SetCourseStatus(string, course.Status) error {
+	return nil
+}
+func (f *fullFakeCourse) FindSyncableCourses(time.Time) ([]course.Model, error) {
+	return nil, nil
+}
 
 type fakeMappingRepo struct {
 	saved map[string]discordmapping.Model

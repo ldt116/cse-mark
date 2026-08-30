@@ -20,7 +20,7 @@ func NewActiveCourseService(r course.Repository, rule *course.Rules) *ActiveCour
 func (s *ActiveCourseService) ListActiveCourses() ([]course.Model, error) {
 	threshold := time.Now().Add(-s.Rule.CourseActiveAge)
 
-	actives, err := s.CourseRepo.FindCoursesUpdatedAfter(threshold)
+	actives, err := s.CourseRepo.FindSyncableCourses(threshold)
 	if err != nil {
 		return nil, err
 	}

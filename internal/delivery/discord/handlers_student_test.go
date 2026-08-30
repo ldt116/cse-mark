@@ -88,6 +88,8 @@ func (c *stubCourseRepo) FindCoursesManagedByUser(string) ([]course.Model, error
 func (c *stubCourseRepo) FindCourseById(string) (course.Model, error)            { return course.Model{}, course.ErrNotFound }
 func (c *stubCourseRepo) UpdateCourseLink(string, string, int64, string) error   { return nil }
 func (c *stubCourseRepo) RemoveCourse(string) error                              { return nil }
+func (c *stubCourseRepo) SetCourseStatus(string, course.Status) error            { return nil }
+func (c *stubCourseRepo) FindSyncableCourses(time.Time) ([]course.Model, error)  { return nil, nil }
 
 // newStudentSvc builds a Service with student deps wired.
 func newStudentSvc(ident identityAPI, mr mark.Repository, sr student.Repository, cr course.Repository) (*Service, *fakeGW) {
