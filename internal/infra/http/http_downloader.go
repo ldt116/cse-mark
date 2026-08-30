@@ -43,8 +43,10 @@ func (d *SimpleDownloader) download(rawURL, token string) ([][]string, error) {
 
 	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
-		log.Error().Err(err).Msg("Error building request")
-		return nil, err
+		// *url.Error embeds the full URL (path/query secrets included) —
+		// redact before logging or returning, same as transport errors below.
+		log.Error().Err(redactURLErr(err)).Msg("Error building request")
+		return nil, redactURLErr(err)
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,9 +84,9 @@ func TestDownloadCSVAuthorized_ErrorEnvelope(t *testing.T) {
 			w.WriteHeader(tc.status)
 			json.NewEncoder(w).Encode(map[string]string{"error": tc.code})
 		}))
+		defer srv.Close()
 		dl := newDownloader(t)
 		_, err := dl.DownloadCSVAuthorized(srv.URL, "tok")
-		srv.Close()
 		if err == nil {
 			t.Fatalf("status %d: want error, got nil", tc.status)
 		}
@@ -96,6 +97,20 @@ func TestDownloadCSVAuthorized_ErrorEnvelope(t *testing.T) {
 		if fe.Status != tc.status || fe.Code != tc.code {
 			t.Fatalf("status %d: FeedError = %+v, want {Status:%d Code:%q}", tc.status, fe, tc.status, tc.code)
 		}
+	}
+}
+
+func TestDownloadCSV_MalformedURLRedacted(t *testing.T) {
+	// http.NewRequest fails on control chars in the URL; the returned
+	// *url.Error embeds the full URL (path/query secrets included). The
+	// downloader must strip it before returning or logging.
+	dl := newDownloader(t).(downloader.Repository)
+	_, err := dl.DownloadCSV("http://example.com/feed?token=SUPERSECRET\n")
+	if err == nil {
+		t.Fatal("want error for malformed URL, got nil")
+	}
+	if strings.Contains(err.Error(), "SUPERSECRET") {
+		t.Fatalf("err leaks URL payload: %v", err)
 	}
 }
 
