@@ -1,6 +1,7 @@
 package marksquery
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -164,6 +165,28 @@ func TestQuery_CourseFilterStudentMissing(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("len(got) = %d, want 0", len(got))
+	}
+}
+
+// TestQuery_WireFormat locks the final JSON wire format (json tags, nil -> [],
+// no HTML escaping / re-indentation of the verbatim marks), which the struct
+// field assertions above cannot catch.
+func TestQuery_WireFormat(t *testing.T) {
+	courseRepo, markRepo := newAllCoursesFakes()
+	s := NewService(courseRepo, markRepo)
+
+	got, err := s.Query(studentId, "")
+	if err != nil {
+		t.Fatalf("Query(%q, \"\") error = %v, want nil", studentId, err)
+	}
+
+	b, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("json.Marshal error = %v, want nil", err)
+	}
+	want := `[{"courseId":"c1","marks":{"z_total":10,"a_mid":4}},{"courseId":"c3","marks":{"z_total":9,"a_mid":5}}]`
+	if string(b) != want {
+		t.Errorf("wire JSON =\n%s\nwant\n%s", string(b), want)
 	}
 }
 
