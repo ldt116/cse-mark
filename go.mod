@@ -7,6 +7,7 @@ toolchain go1.27.0
 require (
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/gin-gonic/gin v1.12.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/wire v0.7.0
 	github.com/jedib0t/go-pretty/v6 v6.8.3
 	github.com/joho/godotenv v1.5.1
