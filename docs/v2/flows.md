@@ -71,9 +71,9 @@ Admin /create
   • discord.Bot.EnsureRole(courseId)   → roleID
   • discord.Bot.EnsureChannel(lowercase(courseId), roleID) → channelID
   • lưu roleID và channelID vào database discord_mappings
-  │
-  ▼ (Discord) [classsync] reconcile role ngay
 ```
+
+> Member role assignment không diễn ra ở /create — role-sync scheduler xử lý ở chu kỳ kế tiếp (§5).
 
 > Telegram `/create` dừng sau markimport (không provisioning).
 

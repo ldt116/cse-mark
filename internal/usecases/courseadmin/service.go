@@ -65,9 +65,8 @@ func NewService(
 //  3. Imports marks (reuses markimport).
 //  4. On Discord, ensures role (courseId) + channel (lowercase(courseId)),
 //     and saves their ids into discord_mappings (idempotent).
-//  5. Reconciles roles immediately so /create grants access without waiting for
-//     the scheduler (the reconciliation itself lives in classsync; here we only
-//     provision + persist mapping so the scheduler picks it up).
+//  5. Member role assignment is NOT done here — the role-sync scheduler
+//     picks up the persisted mapping on its next cycle.
 //
 // `actor` is an admin identifier for logging only.
 func (s *Service) Create(ctx context.Context, courseId, link, actor string) (ProvisionResult, error) {
@@ -126,9 +125,7 @@ func (s *Service) Create(ctx context.Context, courseId, link, actor string) (Pro
 
 // Sync reloads marks for an already-provisioned course and returns the import
 // count. Role reconciliation (assign/remove) is the scheduler's job (#12);
-// /sync here means "refresh the data + the role-sync will pick it up". A
-// lightweight immediate reconcile is delegated to the caller (delivery) via the
-// classsync service if available. We keep this method focused on data refresh.
+// /sync here means "refresh the data + the role-sync will pick it up".
 func (s *Service) Sync(ctx context.Context, courseId, actor string) (int, error) {
 	if !s.rules.IsValidCourseId(courseId) {
 		return 0, ErrInvalidCourseId
