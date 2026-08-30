@@ -3,6 +3,7 @@ package courseadmin
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,11 +12,20 @@ import (
 	"thuanle/cse-mark/internal/domain/discordmapping"
 )
 
+// callOrder records the cross-fake call sequence so tests can assert ordering
+// between repos and the importer (e.g. SetCourseStatus before FetchMarkLinkIntoCourse).
+type callOrder struct{ calls []string }
+
+func (o *callOrder) record(s string) { o.calls = append(o.calls, s) }
+
 // fullFakeCourse satisfies the full course.Repository interface.
 type fullFakeCourse struct {
-	links   map[string]string         // last UpdateCourseLink arg
-	courses map[string]course.Model   // for FindCourseById
-	err     error
+	links     map[string]string       // last UpdateCourseLink arg
+	courses   map[string]course.Model // for FindCourseById
+	err       error
+	statusOn  []course.Status // statuses passed to SetCourseStatus
+	statusIds []string        // courseIds passed to SetCourseStatus
+	order     *callOrder      // optional shared call log
 }
 
 func (f *fullFakeCourse) FindCoursesUpdatedAfter(time.Time) ([]course.Model, error) {
@@ -42,7 +52,12 @@ func (f *fullFakeCourse) UpdateCourseLink(courseId, link string, _ int64, _ stri
 	return nil
 }
 func (f *fullFakeCourse) RemoveCourse(string) error { return nil }
-func (f *fullFakeCourse) SetCourseStatus(string, course.Status) error {
+func (f *fullFakeCourse) SetCourseStatus(courseId string, status course.Status) error {
+	f.statusIds = append(f.statusIds, courseId)
+	f.statusOn = append(f.statusOn, status)
+	if f.order != nil {
+		f.order.record("status:" + courseId + ":" + string(status))
+	}
 	return nil
 }
 func (f *fullFakeCourse) FindSyncableCourses(time.Time) ([]course.Model, error) {
@@ -80,11 +95,15 @@ type fakeImporter struct {
 	err       error
 	lastLink  string
 	lastCours string
+	order     *callOrder
 }
 
 func (f *fakeImporter) FetchMarkLinkIntoCourse(courseId, link string) (int, error) {
 	f.lastLink = link
 	f.lastCours = courseId
+	if f.order != nil {
+		f.order.record("fetch:" + courseId)
+	}
 	if f.err != nil {
 		return 0, f.err
 	}
@@ -108,8 +127,8 @@ func (b *fakeBot) EnsureChannel(_ context.Context, name, _ string) (string, erro
 	}
 	return "chan:" + name, nil
 }
-func (b *fakeBot) AssignRole(context.Context, string, string) error    { return nil }
-func (b *fakeBot) RemoveRole(context.Context, string, string) error    { return nil }
+func (b *fakeBot) AssignRole(context.Context, string, string) error          { return nil }
+func (b *fakeBot) RemoveRole(context.Context, string, string) error          { return nil }
 func (b *fakeBot) MembersWithRole(context.Context, string) ([]string, error) { return nil, nil }
 
 func rules() *course.Rules { return course.NewRules(&configs.Config{CourseActiveAge: 1}) }
@@ -193,10 +212,61 @@ func TestSync_ReloadsExistingCourse(t *testing.T) {
 }
 
 func TestSync_UnknownCourse(t *testing.T) {
-	svc := &Service{rules: rules(), courseRepo: &fullFakeCourse{}, imports: &fakeImporter{}, bot: &fakeBot{}}
+	cr := &fullFakeCourse{}
+	svc := &Service{rules: rules(), courseRepo: cr, imports: &fakeImporter{}, bot: &fakeBot{}}
 	_, err := svc.Sync(context.Background(), "CO9999-L99", "a")
 	if !errors.Is(err, course.ErrNotFound) {
 		t.Fatalf("want course.ErrNotFound, got %v", err)
+	}
+	if len(cr.statusOn) != 0 {
+		t.Fatalf("unknown course must not touch status, got %v", cr.statusOn)
+	}
+}
+
+// Issue #43: /sync is the manual un-stick button for stale/inactive courses —
+// Sync must set the course active and do it BEFORE the import so the poller
+// resumes even when this fetch fails.
+func TestSync_ReenablesStaleCourseBeforeFetch(t *testing.T) {
+	order := &callOrder{}
+	cr := &fullFakeCourse{
+		courses: map[string]course.Model{
+			"CO2003-L01": {Id: "CO2003-L01", Link: "https://x.co/m.csv", Status: course.StatusStale},
+		},
+		order: order,
+	}
+	imp := &fakeImporter{imported: 7, order: order}
+	svc := &Service{rules: rules(), courseRepo: cr, imports: imp, bot: &fakeBot{}}
+
+	n, err := svc.Sync(context.Background(), "CO2003-L01", "admin")
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if n != 7 {
+		t.Errorf("imported want 7, got %d", n)
+	}
+	wantSet, wantFetch := "status:CO2003-L01:active", "fetch:CO2003-L01"
+	iSet, iFetch := slices.Index(order.calls, wantSet), slices.Index(order.calls, wantFetch)
+	if iSet < 0 || iFetch < 0 || iSet > iFetch {
+		t.Fatalf("want SetCourseStatus(active) before import, order=%v", order.calls)
+	}
+}
+
+// A failing fetch after /sync must still leave the course active: the poller
+// picks it up again and re-marks it stale/inactive itself on permanent failure.
+func TestSync_FetchFailStillSetActive(t *testing.T) {
+	cr := &fullFakeCourse{
+		courses: map[string]course.Model{
+			"CO2003-L01": {Id: "CO2003-L01", Link: "https://x.co/m.csv", Status: course.StatusInactive},
+		},
+	}
+	imp := &fakeImporter{err: errors.New("feed down")}
+	svc := &Service{rules: rules(), courseRepo: cr, imports: imp, bot: &fakeBot{}}
+
+	if _, err := svc.Sync(context.Background(), "CO2003-L01", "admin"); err == nil {
+		t.Fatal("Sync must propagate the fetch error")
+	}
+	if len(cr.statusOn) != 1 || cr.statusOn[0] != course.StatusActive {
+		t.Fatalf("status must be active even when fetch fails, got %v", cr.statusOn)
 	}
 }
 

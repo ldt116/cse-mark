@@ -87,7 +87,6 @@ func (h *Teacher) LoadCourseLink(c telebot.Context) error {
 		Int64("chatId", chatId).
 		Str("chatUsername", chatUsername).
 		Str("courseId", courseId).
-		Str("link", link).
 		Msg("Admin store marks")
 
 	err = h.courseRepo.UpdateCourseLink(courseId, link, chatId, chatUsername)
@@ -101,6 +100,41 @@ func (h *Teacher) LoadCourseLink(c telebot.Context) error {
 	}
 
 	return helpers.Sendf(c, "%s: Store %d records.", courseId, count)
+}
+
+// SyncCourse re-enables and refreshes a course's marks (/sync, admin only).
+// It is the manual un-stick button for stale/inactive courses (#43): the
+// course is set active BEFORE the fetch so the poller resumes even if this
+// fetch fails. The link is the one already stored on the course (/create).
+func (h *Teacher) SyncCourse(c telebot.Context) error {
+	courseId, err := helpers.Args2Str(c)
+	if err != nil {
+		return err
+	}
+
+	if !h.courseRules.IsValidCourseId(courseId) {
+		return models.NewArgValueMismatchError("courseId invalid")
+	}
+
+	cm, err := h.courseRepo.FindCourseById(courseId)
+	if err != nil {
+		return err
+	}
+
+	if _, err := url.ParseRequestURI(cm.Link); err != nil {
+		return err
+	}
+
+	if err := h.courseRepo.SetCourseStatus(courseId, course.StatusActive); err != nil {
+		return err
+	}
+
+	count, err := h.markImportService.FetchMarkLinkIntoCourse(courseId, cm.Link)
+	if err != nil {
+		return err
+	}
+
+	return helpers.Sendf(c, "%s: synced %d records.", courseId, count)
 }
 
 func (h *Teacher) ClearCourseLink(c telebot.Context) error {

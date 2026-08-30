@@ -39,6 +39,10 @@ var commands = []telebot.Command{
 		Text:        "cancel",
 		Description: "/cancel - Huỷ liên kết đang dở",
 	},
+	{
+		Text:        "sync",
+		Description: "/sync <course> - Admin: bật lại lớp stale + tải lại điểm",
+	},
 }
 
 func NewService(config *configs.Config,
@@ -92,6 +96,9 @@ func NewService(config *configs.Config,
 	adminOnly := b.Group()
 	adminOnly.Use(middleware.Whitelist(config.TeleAdminChatIds...))
 	adminOnly.Handle("/teacher", adminHandler.SetTeacher)
+	// /sync is the manual re-enable for stale/inactive courses (#43), gated to
+	// admin chats like /teacher.
+	adminOnly.Handle("/sync", teacherHandler.SyncCourse)
 
 	return &Service{
 		bot: b,

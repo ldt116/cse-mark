@@ -66,7 +66,6 @@ func (s *Service) CleanRawCsvRecords(records [][]string) ([]map[string]string, e
 func (s *Service) FetchMarkLinkIntoCourse(courseId string, link string) (int, error) {
 	log.Info().
 		Str("courseId", courseId).
-		Str("link", link).
 		Msg("Fetching new marks")
 
 	records, err := s.downloader.DownloadCSVAuthorized(link, s.gvProxyToken)
@@ -107,7 +106,6 @@ func (s *Service) FetchMarkLinkIntoCourse(courseId string, link string) (int, er
 
 	log.Info().
 		Str("course", courseId).
-		Str("link", link).
 		Int("records", len(cleanedRecords)).
 		Msg("Fetched new marks")
 

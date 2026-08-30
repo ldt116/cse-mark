@@ -14,12 +14,12 @@ import (
 // ProvisionResult is what /create and /sync report back: the import count and
 // the Discord role/channel ids (so the delivery layer can echo them).
 type ProvisionResult struct {
-	CourseId   string
-	Imported   int
-	RoleID     string
-	ChannelID  string
-	Link       string
-	Mapped     bool // true if a discord_mappings record exists after provisioning
+	CourseId  string
+	Imported  int
+	RoleID    string
+	ChannelID string
+	Link      string
+	Mapped    bool // true if a discord_mappings record exists after provisioning
 }
 
 // importer is the mark-import capability courseadmin needs. markimport.Service
@@ -139,6 +139,12 @@ func (s *Service) Sync(ctx context.Context, courseId, actor string) (int, error)
 	}
 	if !isValidURL(c.Link) {
 		return 0, ErrInvalidLink
+	}
+	// Re-enable: /sync is also the manual un-stick button for stale/inactive
+	// courses (issue #43). Set active BEFORE the import so the poller resumes
+	// even if this fetch fails; a permanent failure re-marks it on next cycle.
+	if err := s.courseRepo.SetCourseStatus(courseId, course.StatusActive); err != nil {
+		return 0, err
 	}
 	imported, err := s.imports.FetchMarkLinkIntoCourse(courseId, c.Link)
 	if err != nil {
