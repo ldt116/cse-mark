@@ -26,6 +26,11 @@ type Config struct {
 	ApiToken string
 	ApiPort  string
 
+	// v2 — grade-share student-app JWT (#44)
+	AuthJwksURL     string
+	AuthJwtIssuer   string
+	AuthJwtAudience string
+
 	// v2 — Mongo collections (mark-settings DB)
 	DbSettingsStudents        string
 	DbSettingsBindings        string
@@ -72,6 +77,11 @@ func LoadConfig() *Config {
 
 		ApiToken: loadEnv("API_TOKEN", ""),
 		ApiPort:  loadEnv("API_PORT", "8080"),
+
+		// v2 — grade-share student-app JWT (#44)
+		AuthJwksURL:     loadEnv("AUTH_JWKS_URL", "https://student.thuanle.me/.well-known/jwks.json"),
+		AuthJwtIssuer:   loadEnv("AUTH_JWT_ISSUER", "https://student.thuanle.me"),
+		AuthJwtAudience: loadEnv("AUTH_JWT_AUDIENCE", "cse-mark"),
 
 		// v2 — Mongo collections
 		DbSettingsStudents:        loadEnv("DB_SETTINGS_STUDENTS", "students"),

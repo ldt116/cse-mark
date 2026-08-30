@@ -11,7 +11,12 @@ import (
 	"thuanle/cse-mark/internal/delivery/api"
 	"thuanle/cse-mark/internal/delivery/api/handlers"
 	"thuanle/cse-mark/internal/delivery/api/middlewares"
+	"thuanle/cse-mark/internal/domain/jwks"
+	"thuanle/cse-mark/internal/infra/http"
 	"thuanle/cse-mark/internal/infra/mongo"
+	"thuanle/cse-mark/internal/usecases/assertion"
+	"thuanle/cse-mark/internal/usecases/marksquery"
+	"time"
 )
 
 // Injectors from wire.go:
@@ -23,19 +28,57 @@ func InitializeApp() (*App, error) {
 		return nil, err
 	}
 	auth := middlewares.NewAuthMiddleware(config)
+	jwksClient := newJwksRepository(config)
+	mainJwtAuthDeps := newJwtAuthDeps(config)
+	service := newAssertionService(jwksClient, mainJwtAuthDeps)
+	jwt := middlewares.NewJwtMiddleware(service)
 	repository := mongo.NewMarkRepo(client, config)
 	marks := handlers.NewMarksHandler(repository)
+	courseRepository := mongo.NewCourseRepo(client, config)
+	marksqueryService := marksquery.NewService(courseRepository, repository)
+	studentMarks := handlers.NewStudentMarksHandler(marksqueryService)
 	health := handlers.NewHealthHandler()
-	service := api.NewApiService(auth, marks, health, config)
+	apiService := api.NewApiService(auth, jwt, marks, studentMarks, health, config)
 	app := &App{
 		Config:      config,
 		MongoClient: client,
-		ApiService:  service,
+		ApiService:  apiService,
 	}
 	return app, nil
 }
 
 // wire.go:
+
+// JWKS client tuning (#44): timeout bounds each JWKS fetch, ttl bounds how
+// long a fetched key set is served. Constants, not env — not operational
+// tuning surface.
+const (
+	jwksRequestTimeout = 15 * time.Second
+	jwksCacheTtl       = 5 * time.Minute
+)
+
+// newJwksRepository adapts config into the infra JWKS client.
+func newJwksRepository(config *configs.Config) *http.JwksClient {
+	return http.NewJwksClient(config.AuthJwksURL, jwksRequestTimeout, jwksCacheTtl)
+}
+
+// jwtAuthDeps bundles the two string options assertion.NewService takes, so
+// wire can bind them as one value instead of two indistinguishable strings.
+type jwtAuthDeps struct {
+	issuer   string
+	audience string
+}
+
+func newJwtAuthDeps(config *configs.Config) jwtAuthDeps {
+	return jwtAuthDeps{
+		issuer:   config.AuthJwtIssuer,
+		audience: config.AuthJwtAudience,
+	}
+}
+
+func newAssertionService(repo jwks.Repository, deps jwtAuthDeps) *assertion.Service {
+	return assertion.NewService(repo, deps.issuer, deps.audience)
+}
 
 type App struct {
 	Config      *configs.Config

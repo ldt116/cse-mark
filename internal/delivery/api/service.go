@@ -14,7 +14,9 @@ type Service struct {
 }
 
 func NewApiService(authMiddleware *middlewares.Auth,
-	marksHandler *handlers.Marks, healthHandler *handlers.Health, config *configs.Config) *Service {
+	jwtMiddleware *middlewares.Jwt,
+	marksHandler *handlers.Marks, studentMarksHandler *handlers.StudentMarks,
+	healthHandler *handlers.Health, config *configs.Config) *Service {
 	engine := gin.Default()
 
 	// Health check endpoint (no authentication required)
@@ -22,6 +24,8 @@ func NewApiService(authMiddleware *middlewares.Auth,
 
 	// API endpoints (authentication required)
 	engine.GET("/mark", authMiddleware.Handle, marksHandler.GetMark)
+	// Grade-share (#44): student-app JWT auth, separate from the ApiToken above.
+	engine.GET("/marks", jwtMiddleware.Handle, studentMarksHandler.GetAll)
 
 	return &Service{
 		engine: engine,
