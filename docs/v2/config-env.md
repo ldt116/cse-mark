@@ -74,7 +74,9 @@
 
 JWKS cache TTL `5m` và HTTP timeout `15s` là **const trong code** (`cmd/api/wire.go`), không phải env.
 Kid lạ không có trong cache còn fresh → refresh JWKS đúng 1 lần rồi mới trả lỗi (hỗ trợ key rotation);
-refresh fail → `jwks.ErrUnavailable` (503 `jwks_unavailable`), bộ key đã cache giữ nguyên.
+ngoại lệ: cache fresh nhưng keyset rỗng → trả `ErrUnknownKid` ngay, chờ TTL hết mới fetch lại (chống
+hammer endpoint mỗi request). Refresh fail → `jwks.ErrUnavailable` (503 `jwks_unavailable`), bộ key đã
+cache giữ nguyên.
 
 ## 7. Cấu trúc Config (Go)
 
