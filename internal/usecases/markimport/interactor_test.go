@@ -60,7 +60,6 @@ type fakeMarkRepo struct {
 	removed   []string
 	addedOn   string
 	addedRows []map[string]string
-	addErr    error
 }
 
 func (f *fakeMarkRepo) GetMark(string, string) (string, error) { return "", mark.ErrNotFound }
@@ -69,14 +68,11 @@ func (f *fakeMarkRepo) RemoveMarksByCourseId(courseId string) error {
 	return nil
 }
 func (f *fakeMarkRepo) AddCourseMarks(courseId string, marks []map[string]string) error {
-	if f.addErr != nil {
-		return f.addErr
-	}
 	f.addedOn = courseId
 	f.addedRows = marks
 	return nil
 }
-func (f *fakeMarkRepo) RemoveCourseMarks(string) error { return nil }
+func (f *fakeMarkRepo) RemoveCourseMarks(string) error          { return nil }
 func (f *fakeMarkRepo) ListStudentIds(string) ([]string, error) { return nil, nil }
 
 func newSvc(dl downloader.AuthorizedRepository, mk mark.Repository) *Service {

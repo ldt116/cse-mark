@@ -17,6 +17,10 @@ type SimpleDownloader struct {
 	Client *http.Client
 }
 
+// *SimpleDownloader must keep satisfying the authorized feed port that
+// markimport consumes; guard the wider interface at compile time.
+var _ downloader.AuthorizedRepository = (*SimpleDownloader)(nil)
+
 func NewSimpleDownloader(config *configs.Config) downloader.Repository {
 	return &SimpleDownloader{
 		Client: &http.Client{

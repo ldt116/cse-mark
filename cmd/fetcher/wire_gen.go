@@ -35,7 +35,7 @@ func InitializeApp() (*App, error) {
 	// rostersync) and downloader.AuthorizedRepository (markimport); the ctor
 	// declares the former, so assert the wider interface here.
 	service := markimport.NewService(downloaderRepository.(downloader.AuthorizedRepository), repository, markRepository, config.GvProxyToken)
-	marksyncService := marksync.NewService(activeCourseService, downloaderRepository, service)
+	marksyncService := marksync.NewService(activeCourseService, repository, service)
 	studentRepository := mongo.NewStudentRepo(client, config)
 	rostersyncService := rostersync.NewService(downloaderRepository, studentRepository, config)
 	app := &App{
