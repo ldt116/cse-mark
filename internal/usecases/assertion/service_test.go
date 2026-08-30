@@ -21,13 +21,17 @@ const (
 
 // fakeJwks is a hand-rolled jwks.Repository. keys maps kid → public key;
 // err, when set, short-circuits SigningKey. Tests can swap keys or err
-// between calls to simulate key rotation or endpoint failure.
+// between calls to simulate key rotation or endpoint failure. calls counts
+// SigningKey invocations so tests can assert the parser rejected a token
+// before ever hitting the JWKS lookup.
 type fakeJwks struct {
-	keys map[string]ed25519.PublicKey
-	err  error
+	keys  map[string]ed25519.PublicKey
+	err   error
+	calls int
 }
 
 func (f *fakeJwks) SigningKey(kid string) (ed25519.PublicKey, error) {
+	f.calls++
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -194,6 +198,45 @@ func TestVerify_WrongAlg(t *testing.T) {
 	_, err = newService(repo).Verify(token)
 	if !errors.Is(err, ErrInvalid) {
 		t.Errorf("Verify() error = %v, want ErrInvalid", err)
+	}
+	// The alg whitelist must reject HS256 before the parser calls the
+	// keyfunc. This is the assertion with teeth: without WithValidMethods
+	// the keyfunc runs (calls > 0) and this test fails, even though the
+	// ed25519-vs-[]byte key mismatch still yields ErrInvalid above.
+	if repo.calls != 0 {
+		t.Errorf("keyfunc called %d time(s), want 0 — alg whitelist must reject before JWKS lookup", repo.calls)
+	}
+}
+
+// TestVerify_AlgNone locks the same whitelist from the other side: an
+// unsigned alg=none token must be rejected before any JWKS lookup. If
+// WithValidMethods is dropped from service.go, the keyfunc is invoked
+// (calls > 0) and this test fails, even though golang-jwt would still
+// refuse the none signature on its own.
+func TestVerify_AlgNone(t *testing.T) {
+	key := newKeyPair(t)
+	repo := &fakeJwks{keys: map[string]ed25519.PublicKey{"key-a": key.pub}}
+
+	claims := jwt.RegisteredClaims{
+		Issuer:    testIssuer,
+		Audience:  jwt.ClaimStrings{testAudience},
+		Subject:   testSubject,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodNone, claims)
+	tok.Header["kid"] = "key-a"
+	token, err := tok.SignedString(jwt.UnsafeAllowNoneSignatureType)
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+
+	_, err = newService(repo).Verify(token)
+	if !errors.Is(err, ErrInvalid) {
+		t.Errorf("Verify() error = %v, want ErrInvalid", err)
+	}
+	if repo.calls != 0 {
+		t.Errorf("keyfunc called %d time(s), want 0 — alg whitelist must reject before JWKS lookup", repo.calls)
 	}
 }
 
