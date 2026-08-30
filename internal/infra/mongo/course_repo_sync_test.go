@@ -46,11 +46,13 @@ func TestCourseRepo_SetCourseStatus(t *testing.T) {
 	cfg.DbSettingsCourses = "courses"
 	repo := NewCourseRepo(client, cfg)
 
-	now := time.Now().Unix()
+	// Insert with an OLD updated_at so the "unchanged" assertion has signal:
+	// if SetCourseStatus accidentally rewrote updated_at, the values differ.
+	oldUpdated := time.Now().Unix() - 86400
 	coll := client.mgClient.Database(cfg.DbSettings).Collection(cfg.DbSettingsCourses)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := coll.InsertOne(ctx, bson.M{"_id": "c1", "course": "c1", "link": "l1", "updated_at": now}); err != nil {
+	if _, err := coll.InsertOne(ctx, bson.M{"_id": "c1", "course": "c1", "link": "l1", "updated_at": oldUpdated}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 
@@ -68,7 +70,7 @@ func TestCourseRepo_SetCourseStatus(t *testing.T) {
 	if got.EffectiveStatus() != course.StatusInactive {
 		t.Errorf("EffectiveStatus: want %q, got %q", course.StatusInactive, got.EffectiveStatus())
 	}
-	if got.UpdatedAt != now {
-		t.Errorf("updated_at must not change on SetCourseStatus: want %d, got %d", now, got.UpdatedAt)
+	if got.UpdatedAt != oldUpdated {
+		t.Errorf("updated_at must not change on SetCourseStatus: want %d (old value), got %d", oldUpdated, got.UpdatedAt)
 	}
 }
