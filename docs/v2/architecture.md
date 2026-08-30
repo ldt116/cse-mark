@@ -46,7 +46,7 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 | `domain/discordmapping` | **mới** | entity DiscordMapping `Model{CourseId, DiscordRoleId, DiscordChannelId}`, `Repository` |
 | `domain/user` | hiện có (legacy v1) | không tham gia phân quyền v2 |
 | `domain/mark` | hiện có | `Repository` (per-course) |
-| `domain/downloader` | hiện có | `Repository.DownloadCSV` |
+| `domain/downloader` | hiện có (mở rộng) | `Repository.DownloadCSV`, `AuthorizedRepository.DownloadCSVAuthorized` (Bearer khi có token; token rỗng = public CSV, không header), `FeedError{Status, Code}` cho phản hồi non-2xx |
 | `domain/teleuser` | hiện có | validation |
 | `domain/student` | **mới** | `Model{MSSV,Name,Email}`, `Repository` |
 | `domain/binding` | **mới** | `Model{Platform,PlatformUserID,MSSV,Verified,BoundAt}`, `Repository` (index unique `platform + mssv` và `platform + platform_user_id`) |
@@ -60,8 +60,8 @@ internal/infra/{mongo,http,discord,email}  ← framework & driver
 |---|---|---|
 | `usecases/iam` | **mở rộng** | `AuthzService`: `IsAdmin` (kiểm tra whitelist config theo platform UserID); các thao tác quản trị dùng chung check này |
 | `usecases/coursequery` | hiện có | `ActiveCourseService` |
-| `usecases/markimport` | hiện có | download + parse + import marks |
-| `usecases/marksync` | hiện có | scheduler mark sync 10p |
+| `usecases/markimport` | hiện có (mở rộng) | download (Bearer `GV_PROXY_TOKEN` khi cấu hình) + parse + import marks |
+| `usecases/marksync` | hiện có (mở rộng) | scheduler mark sync 10p — `classifyFetchErr` phân lớp lỗi feed (config-token / permanent-mon / permanent-grant / transient) → trạng thái course `active`/`stale`/`inactive` + nhịp poll |
 | `usecases/identity` | **mới** | `BindStart` (kiểm tra roster trước khi sinh OTP, gửi), `BindVerify` (lưu binding), `GetBinding` |
 | `usecases/rostersync` | **mới** | download roster CSV → `student` repo |
 | `usecases/classsync` | **mới** | enrollment → diff role Discord qua `discord.Bot` |
@@ -133,3 +133,5 @@ Class CSV  ──fetcher──▶ mark cache ──▶ enrollment ──▶ clas
                                           │
 /mark  ──tele/discord──▶ identity.GetBinding(PlatformUserID) ──▶ mark repo ──▶ reply
 ```
+
+> Mark feed: khi `GV_PROXY_TOKEN` được cấu hình, fetcher gửi `Authorization: Bearer` tới proxy gv; để trống thì fetch public CSV như cũ (không header). Lỗi feed được phân lớp để điều khiển trạng thái course `active`/`stale`/`inactive` và nhịp poll (`flows.md` §4.1–4.2); `/sync <courseId>` (Discord + Telegram) kích hoạt lại môn stale/inactive.

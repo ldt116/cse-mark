@@ -77,19 +77,43 @@ Admin /create
 
 > Telegram `/create` dừng sau markimport (không provisioning).
 
-## 4. Mark sync (fetcher, giữ nguyên v1)
+## 4. Mark sync (fetcher)
 
 ```text
 [scheduler, mỗi 10 phút]
   │
   ▼
-[coursequery] ListActiveCourses (updated_at ≤ 9 tháng, có link)
+[coursequery] ListActiveCourses → FindSyncableCourses
+  (updated_at ≤ 9 tháng, có link, status ≠ inactive; thiếu status = active)
   │ (cách nhau 1 phút giữa các lớp)
   ▼
 [markimport.FetchMarkLinkIntoCourse] cho mỗi lớp
+  • DownloadCSVAuthorized(link, GV_PROXY_TOKEN)
+       └─ token rỗng → không gửi Authorization (fetch public CSV như cũ)
+  │
+  ▼
+[marksync] classifyFetchErr → hành vi theo lớp lỗi (§4.1), trạng thái course (§4.2)
 ```
 
-Cập nhật mark cache + enrollment (implicit).
+Cập nhật mark cache + enrollment (implicit). Lỗi fetch **không** xoá marks cũ — chỉ lần import thành công mới thay dữ liệu.
+
+### 4.1. Phân lớp lỗi feed
+
+Lỗi download (phiên bản `*downloader.FeedError{Status, Code}`) được `classifyFetchErr` (`internal/usecases/marksync/interactor.go`) ánh xạ vào hành động:
+
+| Lỗi | Lớp | Hành vi |
+|---|---|---|
+| 401, code `service_token_invalid` | config token | `GV_PROXY_TOKEN` hỏng: log Error (dedupe 1h toàn service), môn đó thử lại sau 1h |
+| 403 / 404 (bất kỳ code) | permanent môn đó | Warn → course `stale`, poll chậm 1h/lần, **giữ marks lần import tốt cuối** |
+| 410 | grant revoked | course `inactive`: ngừng poll, KHÔNG teardown; marks đóng băng, bot vẫn hiển thị |
+| 429, 5xx, lỗi mạng/parse/khác | transient | đếm liên tiếp; đủ 6 lần → Warn "feed unhealthy" (1 lần/streak); thành công reset bộ đếm + auto-heal `stale`→`active` |
+
+### 4.2. Trạng thái course
+
+- `active` — mặc định; course cũ chưa có field `status` vẫn coi là active.
+- `stale` — permanent fail (403/404): vẫn trong danh sách poll nhưng bị hạ nhịp còn 1h/lần; probe thành công → auto-heal về `active`.
+- `inactive` — grant revoked (410): bị loại khỏi danh sách poll hẳn (`FindSyncableCourses` lọc `status ≠ inactive`); marks đóng băng vẫn đọc được qua bot.
+- `/sync <courseId>` (Discord + Telegram, admin — xem §7) kích hoạt lại môn stale/inactive: set `active` **trước** khi fetch lại ngay.
 
 ## 5. Role sync (discord service)
 
@@ -130,20 +154,25 @@ có courseId:
 reply (Discord: ephemeral; Telegram: reply thường)
 ```
 
-## 7. `/sync <courseId>` (Discord)
+## 7. `/sync <courseId>` (Discord & Telegram)
 
 ```text
-Admin /sync
+Admin /sync <courseId>
   │
   ▼
 [iam] kiểm quyền Admin
   │
   ▼
-markimport.FetchMarkLinkIntoCourse (tải lại CSV)
+set course status = active (TRƯỚC khi fetch — poller tiếp tục kể cả khi fetch fail;
+  đây là nút kích hoạt lại môn stale/inactive)
   │
   ▼
-classsync reconcile role ngay (như §5 cho 1 lớp)
+markimport.FetchMarkLinkIntoCourse (tải lại CSV theo link đã lưu, /create)
+  │
+  ▼ (Discord) classsync reconcile role ngay (như §5 cho 1 lớp)
 ```
+
+> Telegram `/sync` dừng sau markimport (không có role).
 
 ## 8. Telegram `/clear <courseId>`
 

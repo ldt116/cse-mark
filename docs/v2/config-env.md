@@ -59,8 +59,19 @@
 | `ROSTER_CSV_URL` | — | URL roster CSV (mssv,name,email) |
 | `ROSTER_SYNC_INTERVAL` | `24h` | nhịp roster sync |
 | `ROLE_SYNC_INTERVAL` | `30m` | nhịp role-sync (Discord) |
+| `GV_PROXY_TOKEN` | rỗng | service token (Bearer, secret) cho mark feed qua proxy gv — bắt buộc khi feed cần auth; **để trống = fetch public CSV như cũ** (không gửi header `Authorization`) |
 
 (Course active age `9 tháng`, mark sync `10 phút`, downloader timeout `30s` — giữ nguyên v1, hardcoded.)
+
+## 5.1. Trạng thái course & nhịp poll
+
+Mark feed lỗi được phân lớp (config-token / permanent / transient — bảng đầy đủ ở `flows.md` §4.1) và điều khiển trạng thái course:
+
+- `active` — mặc định; course cũ chưa có field `status` vẫn coi là active.
+- `stale` — feed permanent fail cho môn đó (403/404): poll chậm còn 1 lần/giờ, **giữ marks lần import tốt cuối**; fetch thành công → tự về active.
+- `inactive` — grant bị thu hồi (410): poller bỏ qua môn này; marks đóng băng, bot vẫn tra cứu được.
+
+Lệnh `/sync <courseId>` (Discord + Telegram, admin) là nút kích hoạt lại: set `active` **trước** khi fetch lại ngay.
 
 ## 6. Nhóm API
 
@@ -92,6 +103,7 @@ type Config struct {
     OtpLen, OtpMaxAttempts int; OtpTtl time.Duration
     // v2 — Sync
     RosterCsvUrl string; RosterSyncInterval, RoleSyncInterval time.Duration
+    GvProxyToken string
 }
 ```
 
@@ -118,5 +130,5 @@ ROSTER_SYNC_INTERVAL=24h
 ROLE_SYNC_INTERVAL=30m
 # secrets (qua enc.env / SOPS): TOKEN, ADMINS, DISCORD_TOKEN, DISCORD_GUILD_ID,
 # DISCORD_ADMIN_IDS, SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM,
-# API_TOKEN, ROSTER_CSV_URL
+# API_TOKEN, ROSTER_CSV_URL, GV_PROXY_TOKEN
 ```
