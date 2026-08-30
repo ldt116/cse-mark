@@ -60,8 +60,9 @@ func NewService(
 
 // Create provisions a course from scratch or refreshes an existing one. It:
 //  1. Validates courseId/link.
-//  2. Persists the course + link (admin ownership fields are blank — v2 has no
-//     per-course ownership, SRS §7).
+//  2. Persists the course + link and re-activates it (a fresh link is the
+//     intent to bring an inactive course back, #43). Admin ownership fields
+//     are blank — v2 has no per-course ownership, SRS §7.
 //  3. Imports marks (reuses markimport).
 //  4. On Discord, ensures role (courseId) + channel (lowercase(courseId)),
 //     and saves their ids into discord_mappings (idempotent).
@@ -81,6 +82,13 @@ func (s *Service) Create(ctx context.Context, courseId, link, actor string) (Pro
 	// courses, and the legacy by_id/by_user fields are kept only for backward
 	// compatibility at the storage layer.
 	if err := s.courseRepo.UpdateCourseLink(courseId, link, 0, ""); err != nil {
+		return ProvisionResult{}, err
+	}
+	// A fresh link is the intent to (re-)activate: /create on a course that
+	// went inactive (410 → grant revoked) must clear the flag or the poller
+	// keeps filtering it out via FindSyncableCourses (#43). Set active before
+	// the import so the poller resumes even if this fetch fails.
+	if err := s.courseRepo.SetCourseStatus(courseId, course.StatusActive); err != nil {
 		return ProvisionResult{}, err
 	}
 

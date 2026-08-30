@@ -115,6 +115,8 @@ Lỗi download (phiên bản `*downloader.FeedError{Status, Code}`) được `cl
 - `inactive` — grant revoked (410): bị loại khỏi danh sách poll hẳn (`FindSyncableCourses` lọc `status ≠ inactive`); marks đóng băng vẫn đọc được qua bot.
 - `/sync <courseId>` (Discord + Telegram, admin — xem §7) kích hoạt lại môn stale/inactive: set `active` **trước** khi fetch lại ngay.
 
+> `/sync` chạy ở tiến trình bot — không reset backoff in-memory của fetcher; môn đang trong slow-poll window (≤1h) được fetch lại chậm nhất ở cuối window, success tự heal.
+
 ## 5. Role sync (discord service)
 
 ```text

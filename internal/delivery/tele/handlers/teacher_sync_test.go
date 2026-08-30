@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,6 +131,31 @@ func TestSyncCourse_RejectsInvalidStoredLink(t *testing.T) {
 
 	if err := h.SyncCourse(syncCtx("CO2003-L01")); err == nil {
 		t.Fatal("want error for invalid stored link")
+	}
+	if len(cr.statusOn) != 0 {
+		t.Fatalf("status must not flip on invalid link, got %v", cr.statusOn)
+	}
+}
+
+// Issue #43 (final review M-1): a malformed stored link makes
+// url.ParseRequestURI return a *url.Error whose text embeds the full link (a
+// proxy token may sit in its path/query). The handler must return a link-free
+// sentinel — the middleware echoes "Error: <err>" into the chat.
+func TestSyncCourse_InvalidStoredLinkRedacted(t *testing.T) {
+	cr := &teacherCourseRepo{courses: map[string]course.Model{
+		"CO2003-L01": {Id: "CO2003-L01", Link: "notaurl?token=SUPERSECRET"},
+	}}
+	h := newSyncTeacher(cr, &fakeFeedDownloader{})
+
+	err := h.SyncCourse(syncCtx("CO2003-L01"))
+	if err == nil {
+		t.Fatal("want error for malformed stored link")
+	}
+	if strings.Contains(err.Error(), "SUPERSECRET") {
+		t.Fatalf("err leaks stored link: %v", err)
+	}
+	if !errors.Is(err, models.ErrStoredLinkInvalid) {
+		t.Fatalf("want models.ErrStoredLinkInvalid, got %v", err)
 	}
 	if len(cr.statusOn) != 0 {
 		t.Fatalf("status must not flip on invalid link, got %v", cr.statusOn)

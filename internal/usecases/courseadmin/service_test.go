@@ -164,6 +164,27 @@ func TestCreate_FullProvision(t *testing.T) {
 	}
 }
 
+// Issue #43 (final review I-1): /create with a fresh link must also flip an
+// inactive course back to active. Scenario: 410 → grant revoked → course
+// inactive → grant re-issued upstream → admin /create with the new proxy URL —
+// without the status flip FindSyncableCourses filters the course forever.
+func TestCreate_ReactivesInactiveCourse(t *testing.T) {
+	cr := &fullFakeCourse{
+		courses: map[string]course.Model{
+			"CO2003-L01": {Id: "CO2003-L01", Link: "https://old.co/m.csv", Status: course.StatusInactive},
+		},
+	}
+	imp := &fakeImporter{imported: 1}
+	svc := &Service{rules: rules(), courseRepo: cr, mappingRepo: &fakeMappingRepo{}, imports: imp, bot: &fakeBot{}}
+
+	if _, err := svc.Create(context.Background(), "CO2003-L01", "https://x.co/m.csv", "admin"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if len(cr.statusOn) != 1 || cr.statusIds[0] != "CO2003-L01" || cr.statusOn[0] != course.StatusActive {
+		t.Fatalf("want SetCourseStatus(CO2003-L01, active) after link update, got ids=%v statuses=%v", cr.statusIds, cr.statusOn)
+	}
+}
+
 func TestCreate_RejectsInvalidCourseId(t *testing.T) {
 	svc := &Service{rules: rules(), courseRepo: &fullFakeCourse{}, bot: &fakeBot{}, imports: &fakeImporter{}}
 	_, err := svc.Create(context.Background(), "bad id!", "https://x.co/m.csv", "a")

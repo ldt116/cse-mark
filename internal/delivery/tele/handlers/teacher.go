@@ -72,7 +72,9 @@ func (h *Teacher) LoadCourseLink(c telebot.Context) error {
 
 	_, err = url.ParseRequestURI(link)
 	if err != nil {
-		return err
+		// The raw *url.Error embeds the full link (proxy token included); the
+		// echoed error must stay link-free.
+		return models.NewArgValueMismatchError("link invalid")
 	}
 
 	chatId := c.Chat().ID
@@ -91,6 +93,12 @@ func (h *Teacher) LoadCourseLink(c telebot.Context) error {
 
 	err = h.courseRepo.UpdateCourseLink(courseId, link, chatId, chatUsername)
 	if err != nil {
+		return err
+	}
+
+	// Fresh link = intent to (re-)activate: /create on an inactive (410)
+	// course must clear the flag or the poller keeps skipping it (#43).
+	if err := h.courseRepo.SetCourseStatus(courseId, course.StatusActive); err != nil {
 		return err
 	}
 
@@ -122,7 +130,9 @@ func (h *Teacher) SyncCourse(c telebot.Context) error {
 	}
 
 	if _, err := url.ParseRequestURI(cm.Link); err != nil {
-		return err
+		// The raw *url.Error embeds the stored link (proxy token included);
+		// return the link-free sentinel so the echoed error never leaks it.
+		return models.ErrStoredLinkInvalid
 	}
 
 	if err := h.courseRepo.SetCourseStatus(courseId, course.StatusActive); err != nil {
